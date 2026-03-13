@@ -2,15 +2,20 @@ import { AttemptStatus, TestMode, TestVisibilityStatus } from "@prisma/client";
 import { AppError } from "@/server/utils/errors";
 import {
   createAttemptWithAnswerPlaceholders,
+  finalizeAttemptWithResult,
   findAttemptByIdForUser,
   findAttemptByTestAndUser,
+  findAttemptForSubmission,
+  findSubmittedAttemptResultForUser,
   findTestForAttemptStart,
   findTestQuestionByIdAndTest,
   updateAttemptAnswerRecord,
 } from "@/server/repositories/attempt.repository";
 import {
+  GetAttemptResultQueryInput,
   SaveAnswerInput,
   StartAttemptInput,
+  SubmitAttemptInput,
 } from "@/server/validations/attempt.schema";
 
 function assertTestAvailableForStudentStart(test: {
@@ -32,6 +37,10 @@ function assertTestAvailableForStudentStart(test: {
   if ((test.mode === TestMode.LIVE || test.mode === TestMode.ASSIGNED) && test.endAt && now > test.endAt) {
     throw new AppError("This test is no longer available", 403);
   }
+}
+
+function normalizeAnswer(value: string | null | undefined) {
+  return value?.trim().toUpperCase() || null;
 }
 
 export async function startAttempt(input: StartAttemptInput, userId: string) {
@@ -110,5 +119,106 @@ export async function saveAnswer(input: SaveAnswerInput, userId: string) {
     testId: attempt.testId,
     testQuestionId: testQuestion.id,
     answer,
+  };
+}
+
+export async function submitAttempt(input: SubmitAttemptInput, userId: string) {
+  const attempt = await findAttemptForSubmission(input.attemptId, userId);
+
+  if (!attempt) {
+    throw new AppError("Attempt not found", 404);
+  }
+
+  if (attempt.status !== AttemptStatus.IN_PROGRESS) {
+    throw new AppError("Attempt is not active", 409);
+  }
+
+  let correctCount = 0;
+  let wrongCount = 0;
+  let unansweredCount = 0;
+  let totalMarksObtained = 0;
+
+  const answerResults = attempt.answers.map((answer) => {
+    const selected = normalizeAnswer(answer.selectedAnswer);
+    const correct = normalizeAnswer(answer.testQuestion.question.correctAnswer);
+
+    if (!selected) {
+      unansweredCount += 1;
+      return {
+        answerId: answer.id,
+        isCorrect: null,
+      };
+    }
+
+    if (selected === correct) {
+      correctCount += 1;
+      totalMarksObtained += answer.testQuestion.positiveMarks ?? 1;
+      return {
+        answerId: answer.id,
+        isCorrect: true,
+      };
+    }
+
+    wrongCount += 1;
+    totalMarksObtained -= answer.testQuestion.negativeMarks ?? 0;
+    return {
+      answerId: answer.id,
+      isCorrect: false,
+    };
+  });
+
+  const safeTotalMarks = attempt.test.totalMarks && attempt.test.totalMarks > 0 ? attempt.test.totalMarks : 0;
+  const percentage = safeTotalMarks > 0 ? Number(((totalMarksObtained / safeTotalMarks) * 100).toFixed(2)) : 0;
+
+  const finalizedAttempt = await finalizeAttemptWithResult({
+    attemptId: attempt.id,
+    correctCount,
+    wrongCount,
+    unansweredCount,
+    totalMarksObtained,
+    percentage,
+    answerResults,
+  });
+
+  return finalizedAttempt;
+}
+
+export async function getAttemptResult(input: GetAttemptResultQueryInput, userId: string) {
+  const attempt = await findSubmittedAttemptResultForUser(input.attemptId, userId);
+
+  if (!attempt) {
+    throw new AppError("Submitted result not found", 404);
+  }
+
+  const answerReview = attempt.answers.map((answer, index) => ({
+    answerId: answer.id,
+    questionNumber: index + 1,
+    questionText: answer.testQuestion.question.questionText,
+    selectedAnswer: answer.selectedAnswer,
+    correctAnswer: answer.testQuestion.question.correctAnswer,
+    explanation: answer.testQuestion.question.explanation,
+    isAnswered: answer.isAnswered,
+    isCorrect: answer.isCorrect,
+    markedForReview: answer.markedForReview,
+    sectionTitle: answer.testQuestion.section?.title ?? null,
+  }));
+
+  return {
+    summary: {
+      attemptId: attempt.id,
+      testId: attempt.testId,
+      testTitle: attempt.test.title,
+      status: attempt.status,
+      startedAt: attempt.startedAt,
+      submittedAt: attempt.submittedAt,
+      totalMarksObtained: attempt.totalMarksObtained,
+      correctCount: attempt.correctCount,
+      wrongCount: attempt.wrongCount,
+      unansweredCount: attempt.unansweredCount,
+      percentage: attempt.percentage,
+      rank: attempt.rank,
+    },
+    sections: attempt.test.sections,
+    answerReview,
   };
 }

@@ -1,4 +1,4 @@
-import { AttemptStatus, TestVisibilityStatus } from "@prisma/client";
+import { AttemptStatus } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 
 export async function findTestForAttemptStart(testId: string) {
@@ -147,6 +147,110 @@ export async function updateAttemptAnswerRecord(params: {
       testQuestion: {
         include: {
           question: true,
+        },
+      },
+    },
+  });
+}
+
+export async function findAttemptForSubmission(attemptId: string, userId: string) {
+  return prisma.testAttempt.findFirst({
+    where: {
+      id: attemptId,
+      userId,
+    },
+    include: {
+      test: true,
+      answers: {
+        orderBy: {
+          createdAt: "asc",
+        },
+        include: {
+          testQuestion: {
+            include: {
+              question: true,
+              section: true,
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+export async function finalizeAttemptWithResult(params: {
+  attemptId: string;
+  correctCount: number;
+  wrongCount: number;
+  unansweredCount: number;
+  totalMarksObtained: number;
+  percentage: number;
+  answerResults: Array<{
+    answerId: string;
+    isCorrect: boolean | null;
+  }>;
+}) {
+  return prisma.$transaction(async (tx) => {
+    for (const answerResult of params.answerResults) {
+      await tx.attemptAnswer.update({
+        where: { id: answerResult.answerId },
+        data: { isCorrect: answerResult.isCorrect },
+      });
+    }
+
+    return tx.testAttempt.update({
+      where: { id: params.attemptId },
+      data: {
+        status: AttemptStatus.SUBMITTED,
+        submittedAt: new Date(),
+        correctCount: params.correctCount,
+        wrongCount: params.wrongCount,
+        unansweredCount: params.unansweredCount,
+        totalMarksObtained: params.totalMarksObtained,
+        percentage: params.percentage,
+      },
+      include: {
+        test: true,
+        answers: {
+          orderBy: { createdAt: "asc" },
+          include: {
+            testQuestion: {
+              include: {
+                question: true,
+                section: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+}
+
+export async function findSubmittedAttemptResultForUser(attemptId: string, userId: string) {
+  return prisma.testAttempt.findFirst({
+    where: {
+      id: attemptId,
+      userId,
+      status: AttemptStatus.SUBMITTED,
+    },
+    include: {
+      test: {
+        include: {
+          sections: {
+            orderBy: { displayOrder: "asc" },
+          },
+        },
+      },
+      answers: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          testQuestion: {
+            include: {
+              question: true,
+              section: true,
+            },
+          },
         },
       },
     },

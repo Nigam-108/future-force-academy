@@ -24,5 +24,15 @@ export const saveAnswerSchema = z
     }
   });
 
+export const submitAttemptSchema = z.object({
+  attemptId: z.string().min(1, "Attempt ID is required."),
+});
+
+export const getAttemptResultQuerySchema = z.object({
+  attemptId: z.string().min(1, "Attempt ID is required."),
+});
+
 export type StartAttemptInput = z.infer<typeof startAttemptSchema>;
 export type SaveAnswerInput = z.infer<typeof saveAnswerSchema>;
+export type SubmitAttemptInput = z.infer<typeof submitAttemptSchema>;
+export type GetAttemptResultQueryInput = z.infer<typeof getAttemptResultQuerySchema>;
