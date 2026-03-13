@@ -1,81 +1,39 @@
-import { NextRequest, NextResponse } from "next/server";
-import { ZodError } from "zod";
-
+import { NextRequest } from "next/server";
 import { requireAuth } from "@/server/auth/guards";
-import { testService } from "@/server/services/test.service";
-import { listStudentTestsQuerySchema } from "@/server/validations/test.schema";
+import { fail, ok } from "@/server/utils/api-response";
+import { listStudentTests } from "@/server/services/test.service";
+import { listStudentTestsQuerySchema } from "@/server/validations/student-test.schema";
+import { AppError } from "@/server/utils/errors";
 
-function buildErrorResponse(error: unknown) {
-  if (error instanceof ZodError) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Validation failed.",
-        errors: error.flatten(),
-      },
-      { status: 400 }
-    );
+function getStatusCode(error: unknown) {
+  if (error instanceof AppError) {
+    return error.statusCode;
   }
 
   if (error instanceof Error) {
-    const lowerMessage = error.message.toLowerCase();
-
-    if (lowerMessage.includes("unauthorized")) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: error.message,
-        },
-        { status: 401 }
-      );
-    }
-
-    if (lowerMessage.includes("forbidden") || lowerMessage.includes("access")) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: error.message,
-        },
-        { status: 403 }
-      );
-    }
-
-    return NextResponse.json(
-      {
-        success: false,
-        message: error.message || "Internal server error.",
-      },
-      { status: 500 }
-    );
+    if (error.message === "Unauthorized") return 401;
+    if (error.message === "Forbidden") return 403;
   }
 
-  return NextResponse.json(
-    {
-      success: false,
-      message: "Internal server error.",
-    },
-    { status: 500 }
-  );
+  return 400;
 }
 
 export async function GET(request: NextRequest) {
   try {
     await requireAuth();
 
-    const rawQuery = Object.fromEntries(request.nextUrl.searchParams.entries());
-    const validatedQuery = listStudentTestsQuerySchema.parse(rawQuery);
+    const query = Object.fromEntries(request.nextUrl.searchParams.entries());
+    const parsed = listStudentTestsQuerySchema.safeParse(query);
 
-    const data = await testService.listStudentTests(validatedQuery);
+    if (!parsed.success) {
+      return fail("Invalid query parameters", 422, parsed.error.flatten());
+    }
 
-    return NextResponse.json(
-      {
-        success: true,
-        message: "Student tests fetched successfully.",
-        data,
-      },
-      { status: 200 }
-    );
+    const result = await listStudentTests(parsed.data);
+
+    return ok("Student tests fetched successfully", result);
   } catch (error) {
-    return buildErrorResponse(error);
+    const message = error instanceof Error ? error.message : "Failed to fetch student tests";
+    return fail(message, getStatusCode(error));
   }
 }

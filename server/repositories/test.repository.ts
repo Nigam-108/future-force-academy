@@ -108,3 +108,58 @@ export async function listTestRecords(filters: {
     totalPages: Math.ceil(total / filters.limit),
   };
 }
+
+export async function listStudentVisibleTestRecords(filters: {
+  page: number;
+  limit: number;
+  search?: string;
+  mode?: TestMode;
+}) {
+  const where: Prisma.TestWhereInput = {
+    visibilityStatus: TestVisibilityStatus.LIVE,
+    ...(filters.search
+      ? {
+          OR: [
+            { title: { contains: filters.search, mode: "insensitive" } },
+            { slug: { contains: filters.search, mode: "insensitive" } },
+            { description: { contains: filters.search, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+    ...(filters.mode ? { mode: filters.mode } : {}),
+  };
+
+  const skip = (filters.page - 1) * filters.limit;
+
+  const [items, total] = await Promise.all([
+    prisma.test.findMany({
+      where,
+      skip,
+      take: filters.limit,
+      orderBy: [
+        { startAt: "asc" },
+        { createdAt: "desc" },
+      ],
+      include: {
+        sections: {
+          orderBy: { displayOrder: "asc" },
+        },
+        _count: {
+          select: {
+            testQuestions: true,
+            attempts: true,
+          },
+        },
+      },
+    }),
+    prisma.test.count({ where }),
+  ]);
+
+  return {
+    items,
+    total,
+    page: filters.page,
+    limit: filters.limit,
+    totalPages: Math.ceil(total / filters.limit),
+  };
+}
