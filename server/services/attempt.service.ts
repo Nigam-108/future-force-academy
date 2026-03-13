@@ -1,118 +1,114 @@
+import { AttemptStatus, TestMode, TestVisibilityStatus } from "@prisma/client";
+import { AppError } from "@/server/utils/errors";
 import {
-  TestMode,
-  TestVisibilityStatus,
-} from "@prisma/client";
+  createAttemptWithAnswerPlaceholders,
+  findAttemptByIdForUser,
+  findAttemptByTestAndUser,
+  findTestForAttemptStart,
+  findTestQuestionByIdAndTest,
+  updateAttemptAnswerRecord,
+} from "@/server/repositories/attempt.repository";
+import {
+  SaveAnswerInput,
+  StartAttemptInput,
+} from "@/server/validations/attempt.schema";
 
-import { attemptRepository } from "@/server/repositories/attempt.repository";
-import { testRepository } from "@/server/repositories/test.repository";
-import type { StartAttemptInput } from "@/server/validations/attempt.schema";
+function assertTestAvailableForStudentStart(test: {
+  visibilityStatus: TestVisibilityStatus;
+  mode: TestMode;
+  startAt: Date | null;
+  endAt: Date | null;
+}) {
+  if (test.visibilityStatus !== TestVisibilityStatus.LIVE) {
+    throw new AppError("This test is not available for students", 403);
+  }
 
-type AttemptStartableTest = Awaited<
-  ReturnType<typeof testRepository.findByIdForAttemptStart>
->;
+  const now = new Date();
 
-type ExistingAttempt = Awaited<
-  ReturnType<typeof attemptRepository.findExistingByTestAndUser>
->;
+  if ((test.mode === TestMode.LIVE || test.mode === TestMode.ASSIGNED) && test.startAt && now < test.startAt) {
+    throw new AppError("This test is not live yet", 403);
+  }
 
-function ensureTestExists(
-  test: AttemptStartableTest
-): asserts test is NonNullable<AttemptStartableTest> {
+  if ((test.mode === TestMode.LIVE || test.mode === TestMode.ASSIGNED) && test.endAt && now > test.endAt) {
+    throw new AppError("This test is no longer available", 403);
+  }
+}
+
+export async function startAttempt(input: StartAttemptInput, userId: string) {
+  const test = await findTestForAttemptStart(input.testId);
+
   if (!test) {
-    throw new Error("Test not found.");
-  }
-}
-
-function canCreateNewAttempt(test: NonNullable<AttemptStartableTest>, now: Date) {
-  if (test.visibilityStatus === TestVisibilityStatus.DRAFT) {
-    throw new Error("This test is not available to students.");
+    throw new AppError("Test not found", 404);
   }
 
-  if (test.visibilityStatus === TestVisibilityStatus.CLOSED) {
-    throw new Error("This test is closed and cannot be started.");
+  assertTestAvailableForStudentStart(test);
+
+  if (test.testQuestions.length === 0) {
+    throw new AppError("This test has no assigned questions yet", 400);
   }
 
-  if (test.mode === TestMode.LIVE) {
-    if (!test.startAt || !test.endAt) {
-      throw new Error("This live test is not configured correctly.");
-    }
+  const existingAttempt = await findAttemptByTestAndUser(test.id, userId);
 
-    if (now < test.startAt) {
-      throw new Error("This test has not started yet.");
-    }
-
-    if (now > test.endAt) {
-      throw new Error("This test window has ended.");
-    }
-  }
-}
-
-function isSubmittedAttempt(existingAttempt: ExistingAttempt) {
-  return Boolean(existingAttempt?.submittedAt);
-}
-
-class AttemptService {
-  async startAttempt(input: StartAttemptInput, userId: string) {
-    const test = await testRepository.findByIdForAttemptStart(input.testId);
-    ensureTestExists(test);
-
-    const existingAttempt = await attemptRepository.findExistingByTestAndUser(
-      input.testId,
-      userId
-    );
-
-    if (existingAttempt) {
-      if (isSubmittedAttempt(existingAttempt)) {
-        throw new Error("This test has already been submitted.");
-      }
-
+  if (existingAttempt) {
+    if (existingAttempt.status === AttemptStatus.IN_PROGRESS) {
       return {
         resumed: true,
         attempt: existingAttempt,
-        test: {
-          id: test.id,
-          title: test.title,
-          slug: test.slug,
-          mode: test.mode,
-          structureType: test.structureType,
-          visibilityStatus: test.visibilityStatus,
-          totalQuestions: test.totalQuestions,
-          totalMarks: test.totalMarks,
-          durationInMinutes: test.durationInMinutes,
-          startAt: test.startAt,
-          endAt: test.endAt,
-        },
       };
     }
 
-    const now = new Date();
-    canCreateNewAttempt(test, now);
-
-    const attempt = await attemptRepository.createStartAttempt({
-      testId: test.id,
-      userId,
-      startedAt: now,
-      unansweredCount: test.totalQuestions,
-    });
-
-    return {
-      resumed: false,
-      attempt,
-      test: {
-        id: test.id,
-        title: test.title,
-        slug: test.slug,
-        mode: test.mode,
-        structureType: test.structureType,
-        visibilityStatus: test.visibilityStatus,
-        totalQuestions: test.totalQuestions,
-        totalMarks: test.totalMarks,
-        durationInMinutes: test.durationInMinutes,
-        startAt: test.startAt,
-        endAt: test.endAt,
-      },
-    };
+    throw new AppError("Attempt already completed for this test", 409);
   }
+
+  const attempt = await createAttemptWithAnswerPlaceholders({
+    testId: test.id,
+    userId,
+    testQuestionIds: test.testQuestions.map((item) => item.id),
+  });
+
+  return {
+    resumed: false,
+    attempt,
+  };
 }
 
-export const attemptService = new AttemptService();
+export async function saveAnswer(input: SaveAnswerInput, userId: string) {
+  const attempt = await findAttemptByIdForUser(input.attemptId, userId);
+
+  if (!attempt) {
+    throw new AppError("Attempt not found", 404);
+  }
+
+  if (attempt.status !== AttemptStatus.IN_PROGRESS) {
+    throw new AppError("Attempt is not active", 409);
+  }
+
+  const now = new Date();
+  if (attempt.test.endAt && now > attempt.test.endAt) {
+    throw new AppError("Attempt window has expired", 409);
+  }
+
+  const testQuestion = await findTestQuestionByIdAndTest(input.testQuestionId, attempt.testId);
+
+  if (!testQuestion) {
+    throw new AppError("Test question not found for this attempt", 404);
+  }
+
+  const answer = await updateAttemptAnswerRecord({
+    attemptId: input.attemptId,
+    testQuestionId: input.testQuestionId,
+    ...(Object.prototype.hasOwnProperty.call(input, "selectedAnswer")
+      ? { selectedAnswer: input.selectedAnswer ?? null }
+      : {}),
+    ...(typeof input.markedForReview === "boolean"
+      ? { markedForReview: input.markedForReview }
+      : {}),
+  });
+
+  return {
+    attemptId: attempt.id,
+    testId: attempt.testId,
+    testQuestionId: testQuestion.id,
+    answer,
+  };
+}
