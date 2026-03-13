@@ -1,0 +1,211 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  STUDENT
+  ADMIN
+  SUB_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+  PENDING
+}
+
+enum LanguageCode {
+  EN
+  GU
+  HI
+}
+
+enum QuestionType {
+  SINGLE_CORRECT
+  TRUE_FALSE
+  ASSERTION_REASON
+  MULTI_CORRECT
+  MATCH_THE_FOLLOWING
+}
+
+enum DifficultyLevel {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum QuestionStatus {
+  DRAFT
+  APPROVED
+  ACTIVE
+  REJECTED
+}
+
+enum TestMode {
+  PRACTICE
+  LIVE
+  ASSIGNED
+}
+
+enum TestStructureType {
+  SINGLE
+  SECTIONAL
+}
+
+enum TestVisibilityStatus {
+  DRAFT
+  LIVE
+  CLOSED
+}
+
+enum AttemptStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  AUTO_SUBMITTED
+  EXPIRED
+}
+
+model User {
+  id                String       @id @default(cuid())
+  fullName          String
+  email             String       @unique
+  mobileNumber      String?
+  passwordHash      String
+  role              UserRole     @default(STUDENT)
+  status            UserStatus   @default(ACTIVE)
+  preferredLanguage LanguageCode @default(EN)
+  emailVerified     Boolean      @default(false)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  questionsCreated  Question[]   @relation("QuestionCreatedBy")
+  questionsApproved Question[]   @relation("QuestionApprovedBy")
+  testsCreated      Test[]
+  attempts          TestAttempt[]
+}
+
+model Question {
+  id             String          @id @default(cuid())
+  createdById    String?
+  approvedById   String?
+  type           QuestionType
+  difficulty     DifficultyLevel @default(MEDIUM)
+  status         QuestionStatus  @default(DRAFT)
+  questionText   String
+  optionA        String?
+  optionB        String?
+  optionC        String?
+  optionD        String?
+  correctAnswer  String?
+  explanation    String?
+  tags           String[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  createdBy      User?           @relation("QuestionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedBy     User?           @relation("QuestionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  testQuestions  TestQuestion[]
+}
+
+model Test {
+  id                String               @id @default(cuid())
+  createdById       String?
+  title             String
+  slug              String               @unique
+  description       String?
+  mode              TestMode             @default(PRACTICE)
+  structureType     TestStructureType    @default(SINGLE)
+  visibilityStatus  TestVisibilityStatus @default(DRAFT)
+  totalQuestions    Int                  @default(0)
+  totalMarks        Float                @default(0)
+  durationInMinutes Int?
+  startAt           DateTime?
+  endAt             DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  createdBy         User?                @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  sections          TestSection[]
+  testQuestions     TestQuestion[]
+  attempts          TestAttempt[]
+}
+
+model TestSection {
+  id                String   @id @default(cuid())
+  testId            String
+  title             String
+  displayOrder      Int      @default(0)
+  totalQuestions    Int      @default(0)
+  durationInMinutes Int?
+  positiveMarks     Float?
+  negativeMarks     Float?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  test              Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  testQuestions     TestQuestion[]
+}
+
+model TestQuestion {
+  id             String      @id @default(cuid())
+  testId         String
+  questionId     String
+  sectionId      String?
+  displayOrder   Int         @default(0)
+  positiveMarks  Float?
+  negativeMarks  Float?
+  createdAt      DateTime    @default(now())
+
+  test           Test        @relation(fields: [testId], references: [id], onDelete: Cascade)
+  question       Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  section        TestSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  answers        AttemptAnswer[]
+
+  @@unique([testId, questionId])
+}
+
+model TestAttempt {
+  id                 String        @id @default(cuid())
+  testId             String
+  userId             String
+  status             AttemptStatus @default(NOT_STARTED)
+  startedAt          DateTime?
+  submittedAt        DateTime?
+  totalMarksObtained Float?
+  correctCount       Int           @default(0)
+  wrongCount         Int           @default(0)
+  unansweredCount    Int           @default(0)
+  rank               Int?
+  percentage         Float?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  test               Test          @relation(fields: [testId], references: [id], onDelete: Cascade)
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers            AttemptAnswer[]
+
+  @@unique([testId, userId])
+}
+
+model AttemptAnswer {
+  id             String   @id @default(cuid())
+  attemptId      String
+  testQuestionId String
+  selectedAnswer String?
+  markedForReview Boolean @default(false)
+  isAnswered     Boolean  @default(false)
+  isCorrect      Boolean?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  attempt        TestAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  testQuestion   TestQuestion @relation(fields: [testQuestionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, testQuestionId])
+}
