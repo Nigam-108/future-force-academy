@@ -1,37 +1,52 @@
 import { PageShell } from "@/components/shared/page-shell";
+import { fetchInternalApi } from "@/lib/server-api";
 
-export default function StudentProfilePage() {
+type ProfileResponse = {
+  id: string;
+  fullName: string;
+  email: string;
+  mobileNumber: string | null;
+  preferredLanguage: string;
+  emailVerified: boolean;
+  status: string;
+};
+
+export default async function StudentProfilePage() {
+  const result = await fetchInternalApi<ProfileResponse>("/api/student/profile");
+
   return (
-    <PageShell title="Profile & Settings" description="Manage your personal information, preferences, and account settings.">
-      <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-        <div className="rounded-3xl border bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-semibold text-slate-900">Profile Summary</h2>
-          <div className="mt-5 space-y-3 text-sm text-slate-600">
-            <p><span className="font-semibold text-slate-900">Name:</span> Nigam Student</p>
-            <p><span className="font-semibold text-slate-900">Email:</span> nigam@example.com</p>
-            <p><span className="font-semibold text-slate-900">Mobile:</span> +91 99999 99999</p>
+    <PageShell title="Profile" description="Manage your account details and preferences.">
+      <div className="rounded-3xl border bg-white p-6 shadow-sm">
+        {!result.success || !result.data ? (
+          <p className="text-sm text-slate-600">{result.message}</p>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <p className="text-sm text-slate-500">Full Name</p>
+              <p className="mt-1 font-medium text-slate-900">{result.data.fullName}</p>
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">Email</p>
+              <p className="mt-1 font-medium text-slate-900">{result.data.email}</p>
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">Mobile Number</p>
+              <p className="mt-1 font-medium text-slate-900">{result.data.mobileNumber ?? "Not set"}</p>
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">Preferred Language</p>
+              <p className="mt-1 font-medium text-slate-900">{result.data.preferredLanguage}</p>
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">Email Verified</p>
+              <p className="mt-1 font-medium text-slate-900">{result.data.emailVerified ? "Yes" : "No"}</p>
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">Status</p>
+              <p className="mt-1 font-medium text-slate-900">{result.data.status}</p>
+            </div>
           </div>
-        </div>
-
-        <form className="space-y-4 rounded-3xl border bg-white p-8 shadow-sm">
-          <input className="w-full rounded-xl border px-4 py-3" placeholder="Full name" defaultValue="Nigam Student" />
-          <input className="w-full rounded-xl border px-4 py-3" placeholder="Mobile number" defaultValue="+91 99999 99999" />
-          <select className="w-full rounded-xl border px-4 py-3">
-            <option>Preferred language: English</option>
-            <option>Gujarati</option>
-            <option>Hindi</option>
-          </select>
-          <select className="w-full rounded-xl border px-4 py-3">
-            <option>Preferred exam/course</option>
-            <option>Wireless PSI & Technical Operator</option>
-            <option>UPSC</option>
-            <option>GPSC</option>
-          </select>
-          <input type="password" className="w-full rounded-xl border px-4 py-3" placeholder="Change password" />
-          <button className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700">
-            Save Changes
-          </button>
-        </form>
+        )}
       </div>
     </PageShell>
   );
