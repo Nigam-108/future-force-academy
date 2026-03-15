@@ -87,7 +87,10 @@ export async function createAttemptWithAnswerPlaceholders(data: {
   });
 }
 
-export async function findAttemptByIdForUser(attemptId: string, userId: string) {
+export async function findAttemptByIdForUser(
+  attemptId: string,
+  userId: string
+) {
   return prisma.testAttempt.findFirst({
     where: {
       id: attemptId,
@@ -100,7 +103,48 @@ export async function findAttemptByIdForUser(attemptId: string, userId: string) 
   });
 }
 
-export async function findTestQuestionByIdAndTest(testQuestionId: string, testId: string) {
+export async function findAttemptViewForUser(
+  attemptId: string,
+  userId: string
+) {
+  return prisma.testAttempt.findFirst({
+    where: {
+      id: attemptId,
+      userId,
+    },
+    include: {
+      test: {
+        include: {
+          sections: {
+            orderBy: {
+              displayOrder: "asc",
+            },
+          },
+          _count: {
+            select: {
+              testQuestions: true,
+            },
+          },
+        },
+      },
+      answers: {
+        include: {
+          testQuestion: {
+            include: {
+              section: true,
+              question: true,
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+export async function findTestQuestionByIdAndTest(
+  testQuestionId: string,
+  testId: string
+) {
   return prisma.testQuestion.findFirst({
     where: {
       id: testQuestionId,
@@ -153,7 +197,10 @@ export async function updateAttemptAnswerRecord(params: {
   });
 }
 
-export async function findAttemptForSubmission(attemptId: string, userId: string) {
+export async function findAttemptForSubmission(
+  attemptId: string,
+  userId: string
+) {
   return prisma.testAttempt.findFirst({
     where: {
       id: attemptId,
@@ -193,13 +240,19 @@ export async function finalizeAttemptWithResult(params: {
   return prisma.$transaction(async (tx) => {
     for (const answerResult of params.answerResults) {
       await tx.attemptAnswer.update({
-        where: { id: answerResult.answerId },
-        data: { isCorrect: answerResult.isCorrect },
+        where: {
+          id: answerResult.answerId,
+        },
+        data: {
+          isCorrect: answerResult.isCorrect,
+        },
       });
     }
 
     return tx.testAttempt.update({
-      where: { id: params.attemptId },
+      where: {
+        id: params.attemptId,
+      },
       data: {
         status: AttemptStatus.SUBMITTED,
         submittedAt: new Date(),
@@ -227,7 +280,10 @@ export async function finalizeAttemptWithResult(params: {
   });
 }
 
-export async function findSubmittedAttemptResultForUser(attemptId: string, userId: string) {
+export async function findSubmittedAttemptResultForUser(
+  attemptId: string,
+  userId: string
+) {
   return prisma.testAttempt.findFirst({
     where: {
       id: attemptId,

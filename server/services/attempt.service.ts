@@ -6,13 +6,15 @@ import {
   findAttemptByIdForUser,
   findAttemptByTestAndUser,
   findAttemptForSubmission,
+  findAttemptViewForUser,
   findSubmittedAttemptResultForUser,
   findTestForAttemptStart,
   findTestQuestionByIdAndTest,
   updateAttemptAnswerRecord,
 } from "@/server/repositories/attempt.repository";
-import {
+import type {
   GetAttemptResultQueryInput,
+  GetAttemptViewQueryInput,
   SaveAnswerInput,
   StartAttemptInput,
   SubmitAttemptInput,
@@ -30,11 +32,19 @@ function assertTestAvailableForStudentStart(test: {
 
   const now = new Date();
 
-  if ((test.mode === TestMode.LIVE || test.mode === TestMode.ASSIGNED) && test.startAt && now < test.startAt) {
+  if (
+    (test.mode === TestMode.LIVE || test.mode === TestMode.ASSIGNED) &&
+    test.startAt &&
+    now < test.startAt
+  ) {
     throw new AppError("This test is not live yet", 403);
   }
 
-  if ((test.mode === TestMode.LIVE || test.mode === TestMode.ASSIGNED) && test.endAt && now > test.endAt) {
+  if (
+    (test.mode === TestMode.LIVE || test.mode === TestMode.ASSIGNED) &&
+    test.endAt &&
+    now > test.endAt
+  ) {
     throw new AppError("This test is no longer available", 403);
   }
 }
@@ -93,11 +103,15 @@ export async function saveAnswer(input: SaveAnswerInput, userId: string) {
   }
 
   const now = new Date();
+
   if (attempt.test.endAt && now > attempt.test.endAt) {
     throw new AppError("Attempt window has expired", 409);
   }
 
-  const testQuestion = await findTestQuestionByIdAndTest(input.testQuestionId, attempt.testId);
+  const testQuestion = await findTestQuestionByIdAndTest(
+    input.testQuestionId,
+    attempt.testId
+  );
 
   if (!testQuestion) {
     throw new AppError("Test question not found for this attempt", 404);
@@ -153,6 +167,7 @@ export async function submitAttempt(input: SubmitAttemptInput, userId: string) {
     if (selected === correct) {
       correctCount += 1;
       totalMarksObtained += answer.testQuestion.positiveMarks ?? 1;
+
       return {
         answerId: answer.id,
         isCorrect: true,
@@ -161,14 +176,22 @@ export async function submitAttempt(input: SubmitAttemptInput, userId: string) {
 
     wrongCount += 1;
     totalMarksObtained -= answer.testQuestion.negativeMarks ?? 0;
+
     return {
       answerId: answer.id,
       isCorrect: false,
     };
   });
 
-  const safeTotalMarks = attempt.test.totalMarks && attempt.test.totalMarks > 0 ? attempt.test.totalMarks : 0;
-  const percentage = safeTotalMarks > 0 ? Number(((totalMarksObtained / safeTotalMarks) * 100).toFixed(2)) : 0;
+  const safeTotalMarks =
+    attempt.test.totalMarks && attempt.test.totalMarks > 0
+      ? attempt.test.totalMarks
+      : 0;
+
+  const percentage =
+    safeTotalMarks > 0
+      ? Number(((totalMarksObtained / safeTotalMarks) * 100).toFixed(2))
+      : 0;
 
   const finalizedAttempt = await finalizeAttemptWithResult({
     attemptId: attempt.id,
@@ -183,7 +206,10 @@ export async function submitAttempt(input: SubmitAttemptInput, userId: string) {
   return finalizedAttempt;
 }
 
-export async function getAttemptResult(input: GetAttemptResultQueryInput, userId: string) {
+export async function getAttemptResult(
+  input: GetAttemptResultQueryInput,
+  userId: string
+) {
   const attempt = await findSubmittedAttemptResultForUser(input.attemptId, userId);
 
   if (!attempt) {
@@ -220,5 +246,68 @@ export async function getAttemptResult(input: GetAttemptResultQueryInput, userId
     },
     sections: attempt.test.sections,
     answerReview,
+  };
+}
+
+export async function getAttemptView(
+  input: GetAttemptViewQueryInput,
+  userId: string
+) {
+  const attempt = await findAttemptViewForUser(input.attemptId, userId);
+
+  if (!attempt) {
+    throw new AppError("Attempt not found", 404);
+  }
+
+  if (attempt.status !== AttemptStatus.IN_PROGRESS) {
+    throw new AppError("Attempt is not active", 409);
+  }
+
+  const questions = [...attempt.answers]
+    .sort(
+      (a, b) =>
+        (a.testQuestion.displayOrder ?? 0) - (b.testQuestion.displayOrder ?? 0)
+    )
+    .map((answer, index) => ({
+      answerId: answer.id,
+      testQuestionId: answer.testQuestionId,
+      questionNumber: index + 1,
+      displayOrder: answer.testQuestion.displayOrder,
+      questionText: answer.testQuestion.question.questionText,
+      optionA: answer.testQuestion.question.optionA,
+      optionB: answer.testQuestion.question.optionB,
+      optionC: answer.testQuestion.question.optionC,
+      optionD: answer.testQuestion.question.optionD,
+      selectedAnswer: answer.selectedAnswer,
+      markedForReview: answer.markedForReview,
+      isAnswered: answer.isAnswered,
+      sectionTitle: answer.testQuestion.section?.title ?? null,
+      positiveMarks: answer.testQuestion.positiveMarks,
+      negativeMarks: answer.testQuestion.negativeMarks,
+    }));
+
+  return {
+    attempt: {
+      id: attempt.id,
+      testId: attempt.testId,
+      status: attempt.status,
+      startedAt: attempt.startedAt,
+      submittedAt: attempt.submittedAt,
+      title: attempt.test.title,
+      slug: attempt.test.slug,
+      mode: attempt.test.mode,
+      structureType: attempt.test.structureType,
+      totalQuestions: attempt.test._count.testQuestions,
+      totalMarks: attempt.test.totalMarks,
+      durationInMinutes: attempt.test.durationInMinutes,
+    },
+    sections: attempt.test.sections.map((section) => ({
+      id: section.id,
+      title: section.title,
+      displayOrder: section.displayOrder,
+      totalQuestions: section.totalQuestions,
+      durationInMinutes: section.durationInMinutes,
+    })),
+    questions,
   };
 }
