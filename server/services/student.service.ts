@@ -1,9 +1,13 @@
+import { UserStatus } from "@prisma/client";
 import { AppError } from "@/server/utils/errors";
 import {
   findStudentSubmittedResultById,
   findStudentUserById,
+  getAdminStudentById,
   getStudentDashboardStats,
+  listAdminStudents,
   listStudentSubmittedResults,
+  updateStudentStatus,
   updateStudentUserById,
 } from "@/server/repositories/student.repository";
 import { UpdateStudentProfileInput } from "@/server/validations/student-profile.schema";
@@ -91,4 +95,39 @@ export async function getStudentResultById(userId: string, attemptId: string) {
     sections: result.test.sections,
     answerReview,
   };
+}
+
+export async function getAdminStudents(params: {
+  page: number;
+  limit: number;
+  search?: string;
+  status?: UserStatus;
+}) {
+  return listAdminStudents(params);
+}
+
+export async function getAdminStudent(studentId: string) {
+  const result = await getAdminStudentById(studentId);
+
+  if (!result) {
+    throw new AppError("Student not found", 404);
+  }
+
+  return result;
+}
+
+export async function blockStudent(studentId: string) {
+  try {
+    return await updateStudentStatus(studentId, UserStatus.BLOCKED);
+  } catch {
+    throw new AppError("Student not found", 404);
+  }
+}
+
+export async function unblockStudent(studentId: string) {
+  try {
+    return await updateStudentStatus(studentId, UserStatus.ACTIVE);
+  } catch {
+    throw new AppError("Student not found", 404);
+  }
 }
