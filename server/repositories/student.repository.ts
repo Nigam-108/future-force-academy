@@ -49,20 +49,12 @@ export async function updateStudentUserById(
 export async function getStudentDashboardStats(userId: string) {
   const [totalAttempts, inProgressAttempts, submittedAttempts, recentAttempts] =
     await Promise.all([
+      prisma.testAttempt.count({ where: { userId } }),
       prisma.testAttempt.count({
-        where: { userId },
+        where: { userId, status: AttemptStatus.IN_PROGRESS },
       }),
       prisma.testAttempt.count({
-        where: {
-          userId,
-          status: AttemptStatus.IN_PROGRESS,
-        },
-      }),
-      prisma.testAttempt.count({
-        where: {
-          userId,
-          status: AttemptStatus.SUBMITTED,
-        },
+        where: { userId, status: AttemptStatus.SUBMITTED },
       }),
       prisma.testAttempt.findMany({
         where: { userId },
@@ -112,7 +104,10 @@ export async function listStudentSubmittedResults(userId: string) {
   });
 }
 
-export async function findStudentSubmittedResultById(userId: string, attemptId: string) {
+export async function findStudentSubmittedResultById(
+  userId: string,
+  attemptId: string
+) {
   return prisma.testAttempt.findFirst({
     where: {
       id: attemptId,
@@ -216,27 +211,32 @@ export async function getAdminStudentById(studentId: string) {
     return null;
   }
 
-  const [attempts, submittedAttemptsCount, inProgressAttemptsCount, totalAttemptsCount] = await Promise.all([
-    prisma.testAttempt.findMany({
-      where: { userId: studentId },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-      include: {
-        test: {
-          select: {
-            id: true,
-            title: true,
-            slug: true,
-            mode: true,
-            totalMarks: true,
+  const [attempts, submittedAttemptsCount, inProgressAttemptsCount, totalAttemptsCount] =
+    await Promise.all([
+      prisma.testAttempt.findMany({
+        where: { userId: studentId },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        include: {
+          test: {
+            select: {
+              id: true,
+              title: true,
+              slug: true,
+              mode: true,
+              totalMarks: true,
+            },
           },
         },
-      },
-    }),
-    prisma.testAttempt.count({ where: { userId: studentId, status: AttemptStatus.SUBMITTED } }),
-    prisma.testAttempt.count({ where: { userId: studentId, status: AttemptStatus.IN_PROGRESS } }),
-    prisma.testAttempt.count({ where: { userId: studentId } }),
-  ]);
+      }),
+      prisma.testAttempt.count({
+        where: { userId: studentId, status: AttemptStatus.SUBMITTED },
+      }),
+      prisma.testAttempt.count({
+        where: { userId: studentId, status: AttemptStatus.IN_PROGRESS },
+      }),
+      prisma.testAttempt.count({ where: { userId: studentId } }),
+    ]);
 
   return {
     student,
@@ -261,4 +261,78 @@ export async function updateStudentStatus(studentId: string, status: UserStatus)
       updatedAt: true,
     },
   });
+}
+
+export async function getAdminReportSummary() {
+  const [
+    totalStudents,
+    activeStudents,
+    blockedStudents,
+    totalQuestions,
+    totalTests,
+    totalAttempts,
+    submittedAttempts,
+    avgSubmitted,
+  ] = await Promise.all([
+    prisma.user.count({
+      where: { role: UserRole.STUDENT },
+    }),
+    prisma.user.count({
+      where: { role: UserRole.STUDENT, status: UserStatus.ACTIVE },
+    }),
+    prisma.user.count({
+      where: { role: UserRole.STUDENT, status: UserStatus.BLOCKED },
+    }),
+    prisma.question.count(),
+    prisma.test.count(),
+    prisma.testAttempt.count(),
+    prisma.testAttempt.count({
+      where: { status: AttemptStatus.SUBMITTED },
+    }),
+    prisma.testAttempt.aggregate({
+      where: { status: AttemptStatus.SUBMITTED },
+      _avg: {
+        totalMarksObtained: true,
+        percentage: true,
+      },
+    }),
+  ]);
+
+  const recentAttempts = await prisma.testAttempt.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 10,
+    include: {
+      user: {
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+        },
+      },
+      test: {
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+        },
+      },
+    },
+  });
+
+  return {
+    counts: {
+      totalStudents,
+      activeStudents,
+      blockedStudents,
+      totalQuestions,
+      totalTests,
+      totalAttempts,
+      submittedAttempts,
+    },
+    averages: {
+      averageMarksObtained: avgSubmitted._avg.totalMarksObtained ?? 0,
+      averagePercentage: avgSubmitted._avg.percentage ?? 0,
+    },
+    recentAttempts,
+  };
 }

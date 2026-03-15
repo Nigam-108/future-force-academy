@@ -3,6 +3,7 @@ import { AppError } from "@/server/utils/errors";
 import {
   findStudentSubmittedResultById,
   findStudentUserById,
+  getAdminReportSummary,
   getAdminStudentById,
   getStudentDashboardStats,
   listAdminStudents,
@@ -130,4 +131,8 @@ export async function unblockStudent(studentId: string) {
   } catch {
     throw new AppError("Student not found", 404);
   }
+}
+
+export async function getAdminReports() {
+  return getAdminReportSummary();
 }
