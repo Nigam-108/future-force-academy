@@ -1,0 +1,18 @@
+{
+  "items": [
+    {
+      "questionId": "PASTE_QUESTION_ID_1_HERE",
+      "sectionId": "PASTE_SECTION_ID_1_HERE",
+      "displayOrder": 1,
+      "positiveMarks": 1,
+      "negativeMarks": 0.25
+    },
+    {
+      "questionId": "PASTE_QUESTION_ID_2_HERE",
+      "sectionId": "PASTE_SECTION_ID_1_HERE",
+      "displayOrder": 2,
+      "positiveMarks": 1,
+      "negativeMarks": 0.25
+    }
+  ]
+}
