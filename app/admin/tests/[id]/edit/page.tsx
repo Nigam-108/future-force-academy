@@ -41,7 +41,11 @@ export default async function EditTestPage({
         </div>
       ) : (
         <div className="rounded-3xl border bg-white p-6 shadow-sm">
-          <TestBuilderForm mode="edit" testId={id} initialValues={result.data} />
+          <TestBuilderForm
+            mode="edit"
+            testId={id}
+            initialValues={result.data}
+          />
         </div>
       )}
     </PageShell>
