@@ -174,6 +174,13 @@ function TestCard({ test }: { test: AdminTestsResponse["items"][number] }) {
 
         <div className="flex flex-wrap gap-2">
           <Link
+            href={`/admin/tests/${test.id}/questions`}
+            className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            Manage Questions
+          </Link>
+
+          <Link
             href={`/admin/tests/${test.id}/edit`}
             className="inline-flex items-center justify-center rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
