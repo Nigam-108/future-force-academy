@@ -1,67 +1,47 @@
 import { DifficultyLevel, QuestionStatus, QuestionType } from "@prisma/client";
 import { z } from "zod";
 
-const questionBaseSchema = z.object({
-  type: z.nativeEnum(QuestionType).default(QuestionType.SINGLE_CORRECT),
-  difficulty: z.nativeEnum(DifficultyLevel).default(DifficultyLevel.MEDIUM),
-  status: z.nativeEnum(QuestionStatus).optional(),
+const optionTextSchema = z
+  .string()
+  .trim()
+  .min(1, "This option is required.")
+  .max(500, "Option text is too long.");
+
+const quickMcqSchema = z.object({
   questionText: z
     .string()
     .trim()
     .min(5, "Question text must be at least 5 characters long."),
-  optionA: z.string().trim().optional(),
-  optionB: z.string().trim().optional(),
-  optionC: z.string().trim().optional(),
-  optionD: z.string().trim().optional(),
-  correctAnswer: z.string().trim().optional(),
+  optionA: optionTextSchema,
+  optionB: optionTextSchema,
+  optionC: optionTextSchema,
+  optionD: optionTextSchema,
+  correctAnswer: z.enum(["A", "B", "C", "D"]),
   explanation: z.string().trim().optional(),
-  tags: z.array(z.string().trim().min(1)).default([]),
 });
 
-function validateQuestionPayload(
-  data: z.infer<typeof questionBaseSchema>,
+function validateQuickMcq(
+  data: z.infer<typeof quickMcqSchema>,
   ctx: z.RefinementCtx
 ) {
-  if (
-    data.type === QuestionType.SINGLE_CORRECT ||
-    data.type === QuestionType.MULTI_CORRECT
-  ) {
-    if (!data.optionA || !data.optionB || !data.optionC || !data.optionD) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["optionA"],
-        message: "Option A, B, C and D are required for this question type.",
-      });
-    }
+  const normalizedOptions = [
+    data.optionA,
+    data.optionB,
+    data.optionC,
+    data.optionD,
+  ].map((value) => value.trim().toLowerCase());
 
-    if (!data.correctAnswer) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["correctAnswer"],
-        message: "Correct answer is required for this question type.",
-      });
-    }
-  }
-
-  if (data.type === QuestionType.TRUE_FALSE) {
-    if (!data.correctAnswer || !["TRUE", "FALSE"].includes(data.correctAnswer)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["correctAnswer"],
-        message:
-          'Correct answer must be either "TRUE" or "FALSE" for TRUE_FALSE questions.',
-      });
-    }
+  if (new Set(normalizedOptions).size !== normalizedOptions.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["optionA"],
+      message: "Options A, B, C and D must be different.",
+    });
   }
 }
 
-export const createQuestionSchema = questionBaseSchema.superRefine(
-  validateQuestionPayload
-);
-
-export const updateQuestionSchema = questionBaseSchema.superRefine(
-  validateQuestionPayload
-);
+export const createQuestionSchema = quickMcqSchema.superRefine(validateQuickMcq);
+export const updateQuestionSchema = quickMcqSchema.superRefine(validateQuickMcq);
 
 export const listQuestionsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),

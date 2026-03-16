@@ -7,6 +7,7 @@ import {
   findSectionsByIds,
   findTestForQuestionAssignment,
   listAssignedTestQuestions,
+  normalizeAssignedTestQuestionOrder,
   updateAssignedTestQuestionById,
   type UpdateAssignedTestQuestionRecordInput,
 } from "@/server/repositories/test-question.repository";
@@ -28,7 +29,9 @@ async function validateSectionsForTest(testId: string, sectionIds: string[]) {
     throw new AppError("One or more section IDs are invalid", 404);
   }
 
-  const invalidSectionForTest = sections.find((section) => section.testId !== testId);
+  const invalidSectionForTest = sections.find(
+    (section) => section.testId !== testId
+  );
 
   if (invalidSectionForTest) {
     throw new AppError("One or more sections do not belong to this test", 400);
@@ -92,21 +95,6 @@ export async function assignQuestionsToTest(
     );
   }
 
-  const existingDisplayOrders = new Set(
-    test.testQuestions.map((item) => item.displayOrder)
-  );
-
-  const duplicateDisplayOrders = input.items
-    .map((item) => item.displayOrder)
-    .filter((order) => existingDisplayOrders.has(order));
-
-  if (duplicateDisplayOrders.length > 0) {
-    throw new AppError(
-      "One or more displayOrder values are already used in this test",
-      409
-    );
-  }
-
   if (test.structureType === TestStructureType.SECTIONAL) {
     const anyMissingSectionId = input.items.some((item) => !item.sectionId);
 
@@ -153,20 +141,6 @@ export async function updateAssignedQuestionInTest(
     throw new AppError("Assigned question row not found", 404);
   }
 
-  const nextDisplayOrder = input.displayOrder ?? existingAssignment.displayOrder;
-
-  const displayOrderConflict = test.testQuestions.find(
-    (item) =>
-      item.id !== assignmentId && item.displayOrder === nextDisplayOrder
-  );
-
-  if (displayOrderConflict) {
-    throw new AppError(
-      "This displayOrder is already used by another assigned question in the same test",
-      409
-    );
-  }
-
   let nextSectionId: string | null = existingAssignment.sectionId;
 
   if (test.structureType === TestStructureType.SECTIONAL) {
@@ -186,10 +160,6 @@ export async function updateAssignedQuestionInTest(
 
   const patch: UpdateAssignedTestQuestionRecordInput = {};
 
-  if (input.displayOrder !== undefined) {
-    patch.displayOrder = input.displayOrder;
-  }
-
   if (input.positiveMarks !== undefined) {
     patch.positiveMarks = input.positiveMarks;
   }
@@ -200,7 +170,10 @@ export async function updateAssignedQuestionInTest(
 
   if (test.structureType === TestStructureType.SECTIONAL) {
     patch.sectionId = nextSectionId;
-  } else if (input.sectionId !== undefined || existingAssignment.sectionId !== null) {
+  } else if (
+    input.sectionId !== undefined ||
+    existingAssignment.sectionId !== null
+  ) {
     patch.sectionId = null;
   }
 
@@ -236,6 +209,7 @@ export async function removeAssignedQuestionFromTest(
   }
 
   const deleted = await deleteAssignedTestQuestionById(assignmentId);
+  await normalizeAssignedTestQuestionOrder(test.id);
 
   return {
     test: {

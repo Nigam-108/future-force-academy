@@ -1,4 +1,4 @@
-import { QuestionStatus } from "@prisma/client";
+import { DifficultyLevel, QuestionStatus, QuestionType } from "@prisma/client";
 import { AppError } from "@/server/utils/errors";
 import {
   createQuestionRecord,
@@ -18,9 +18,9 @@ export async function createQuestion(
 ) {
   return createQuestionRecord({
     createdById: actorId,
-    type: input.type,
-    difficulty: input.difficulty,
-    status: input.status ?? QuestionStatus.DRAFT,
+    type: QuestionType.SINGLE_CORRECT,
+    difficulty: DifficultyLevel.MEDIUM,
+    status: QuestionStatus.ACTIVE,
     questionText: input.questionText,
     optionA: input.optionA,
     optionB: input.optionB,
@@ -28,7 +28,7 @@ export async function createQuestion(
     optionD: input.optionD,
     correctAnswer: input.correctAnswer,
     explanation: input.explanation,
-    tags: input.tags,
+    tags: [],
   });
 }
 
@@ -54,9 +54,9 @@ export async function updateQuestion(id: string, input: UpdateQuestionInput) {
   }
 
   return updateQuestionRecord(id, {
-    type: input.type,
-    difficulty: input.difficulty,
-    status: input.status ?? existingQuestion.status,
+    type: QuestionType.SINGLE_CORRECT,
+    difficulty: existingQuestion.difficulty ?? DifficultyLevel.MEDIUM,
+    status: existingQuestion.status ?? QuestionStatus.ACTIVE,
     questionText: input.questionText,
     optionA: input.optionA,
     optionB: input.optionB,
@@ -64,6 +64,6 @@ export async function updateQuestion(id: string, input: UpdateQuestionInput) {
     optionD: input.optionD,
     correctAnswer: input.correctAnswer,
     explanation: input.explanation,
-    tags: input.tags,
+    tags: existingQuestion.tags ?? [],
   });
 }

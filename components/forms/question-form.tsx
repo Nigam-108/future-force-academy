@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 type QuestionType =
@@ -12,6 +12,7 @@ type QuestionType =
 
 type DifficultyLevel = "EASY" | "MEDIUM" | "HARD";
 type QuestionStatus = "DRAFT" | "APPROVED" | "ACTIVE" | "REJECTED";
+type AnswerOption = "A" | "B" | "C" | "D";
 
 type ApiResponse<T> = {
   success: boolean;
@@ -40,16 +41,51 @@ type QuestionFormProps = {
   initialValues?: QuestionFormInitialValues;
 };
 
-const QUESTION_TYPES: QuestionType[] = [
-  "SINGLE_CORRECT",
-  "TRUE_FALSE",
-  "ASSERTION_REASON",
-  "MULTI_CORRECT",
-  "MATCH_THE_FOLLOWING",
+type QuestionFormState = {
+  questionText: string;
+  optionA: string;
+  optionB: string;
+  optionC: string;
+  optionD: string;
+  correctAnswer: AnswerOption | "";
+  explanation: string;
+};
+
+const ANSWER_OPTIONS: Array<{
+  key: AnswerOption;
+  label: string;
+  field: keyof Pick<
+    QuestionFormState,
+    "optionA" | "optionB" | "optionC" | "optionD"
+  >;
+}> = [
+  { key: "A", label: "A", field: "optionA" },
+  { key: "B", label: "B", field: "optionB" },
+  { key: "C", label: "C", field: "optionC" },
+  { key: "D", label: "D", field: "optionD" },
 ];
 
-const DIFFICULTIES: DifficultyLevel[] = ["EASY", "MEDIUM", "HARD"];
-const STATUSES: QuestionStatus[] = ["DRAFT", "APPROVED", "ACTIVE", "REJECTED"];
+function buildFormState(
+  initialValues?: QuestionFormInitialValues
+): QuestionFormState {
+  const nextCorrectAnswer = initialValues?.correctAnswer;
+
+  return {
+    questionText: initialValues?.questionText ?? "",
+    optionA: initialValues?.optionA ?? "",
+    optionB: initialValues?.optionB ?? "",
+    optionC: initialValues?.optionC ?? "",
+    optionD: initialValues?.optionD ?? "",
+    correctAnswer:
+      nextCorrectAnswer === "A" ||
+      nextCorrectAnswer === "B" ||
+      nextCorrectAnswer === "C" ||
+      nextCorrectAnswer === "D"
+        ? nextCorrectAnswer
+        : "",
+    explanation: initialValues?.explanation ?? "",
+  };
+}
 
 export function QuestionForm({
   mode = "create",
@@ -58,69 +94,43 @@ export function QuestionForm({
 }: QuestionFormProps) {
   const router = useRouter();
 
-  const [type, setType] = useState<QuestionType>(
-    initialValues?.type ?? "SINGLE_CORRECT"
+  const [form, setForm] = useState<QuestionFormState>(() =>
+    buildFormState(initialValues)
   );
-  const [difficulty, setDifficulty] = useState<DifficultyLevel>(
-    initialValues?.difficulty ?? "MEDIUM"
-  );
-  const [status, setStatus] = useState<QuestionStatus>(
-    initialValues?.status ?? "DRAFT"
-  );
-  const [questionText, setQuestionText] = useState(
-    initialValues?.questionText ?? ""
-  );
-  const [optionA, setOptionA] = useState(initialValues?.optionA ?? "");
-  const [optionB, setOptionB] = useState(initialValues?.optionB ?? "");
-  const [optionC, setOptionC] = useState(initialValues?.optionC ?? "");
-  const [optionD, setOptionD] = useState(initialValues?.optionD ?? "");
-  const [correctAnswer, setCorrectAnswer] = useState(
-    initialValues?.correctAnswer ?? ""
-  );
-  const [explanation, setExplanation] = useState(
-    initialValues?.explanation ?? ""
-  );
-  const [tags, setTags] = useState((initialValues?.tags ?? []).join(", "));
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const isOptionBased =
-    type === "SINGLE_CORRECT" || type === "MULTI_CORRECT";
+  function updateField<K extends keyof QuestionFormState>(
+    key: K,
+    value: QuestionFormState[K]
+  ) {
+    setForm((previous) => ({
+      ...previous,
+      [key]: value,
+    }));
+  }
 
-  const correctAnswerOptions = useMemo(() => {
-    if (type === "TRUE_FALSE") {
-      return ["TRUE", "FALSE"];
-    }
-
-    if (isOptionBased) {
-      return ["A", "B", "C", "D"];
-    }
-
-    return [];
-  }, [type, isOptionBased]);
+  function resetCreateForm() {
+    setForm(buildFormState());
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     setSubmitting(true);
     setErrorMessage(null);
+    setSuccessMessage(null);
 
     try {
       const payload = {
-        type,
-        difficulty,
-        status,
-        questionText: questionText.trim(),
-        optionA: optionA.trim() || undefined,
-        optionB: optionB.trim() || undefined,
-        optionC: optionC.trim() || undefined,
-        optionD: optionD.trim() || undefined,
-        correctAnswer: correctAnswer.trim() || undefined,
-        explanation: explanation.trim() || undefined,
-        tags: tags
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean),
+        questionText: form.questionText.trim(),
+        optionA: form.optionA.trim(),
+        optionB: form.optionB.trim(),
+        optionC: form.optionC.trim(),
+        optionD: form.optionD.trim(),
+        correctAnswer: form.correctAnswer,
+        explanation: form.explanation.trim() || undefined,
       };
 
       const url =
@@ -147,6 +157,14 @@ export function QuestionForm({
         throw new Error(json?.message || "Failed to save question.");
       }
 
+      if (mode === "create") {
+        resetCreateForm();
+        setSuccessMessage(
+          "MCQ saved successfully. You can continue adding the next question."
+        );
+        return;
+      }
+
       router.push("/admin/questions");
       router.refresh();
     } catch (error) {
@@ -166,126 +184,88 @@ export function QuestionForm({
         </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <select
-          value={type}
-          onChange={(e) => {
-            setType(e.target.value as QuestionType);
-            setCorrectAnswer("");
-          }}
-          className="rounded-xl border px-4 py-3"
-        >
-          {QUESTION_TYPES.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={difficulty}
-          onChange={(e) => setDifficulty(e.target.value as DifficultyLevel)}
-          className="rounded-xl border px-4 py-3"
-        >
-          {DIFFICULTIES.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value as QuestionStatus)}
-          className="rounded-xl border px-4 py-3"
-        >
-          {STATUSES.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <textarea
-        value={questionText}
-        onChange={(e) => setQuestionText(e.target.value)}
-        className="min-h-36 w-full rounded-xl border px-4 py-3"
-        placeholder="Enter question text"
-        required
-      />
-
-      {isOptionBased ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <input
-            value={optionA}
-            onChange={(e) => setOptionA(e.target.value)}
-            className="rounded-xl border px-4 py-3"
-            placeholder="Option A"
-            required={isOptionBased}
-          />
-          <input
-            value={optionB}
-            onChange={(e) => setOptionB(e.target.value)}
-            className="rounded-xl border px-4 py-3"
-            placeholder="Option B"
-            required={isOptionBased}
-          />
-          <input
-            value={optionC}
-            onChange={(e) => setOptionC(e.target.value)}
-            className="rounded-xl border px-4 py-3"
-            placeholder="Option C"
-            required={isOptionBased}
-          />
-          <input
-            value={optionD}
-            onChange={(e) => setOptionD(e.target.value)}
-            className="rounded-xl border px-4 py-3"
-            placeholder="Option D"
-            required={isOptionBased}
-          />
+      {successMessage ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+          {successMessage}
         </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {correctAnswerOptions.length > 0 ? (
-          <select
-            value={correctAnswer}
-            onChange={(e) => setCorrectAnswer(e.target.value)}
-            className="rounded-xl border px-4 py-3"
-            required={type === "TRUE_FALSE" || isOptionBased}
-          >
-            <option value="">Select correct answer</option>
-            {correctAnswerOptions.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input
-            value={correctAnswer}
-            onChange={(e) => setCorrectAnswer(e.target.value)}
-            className="rounded-xl border px-4 py-3"
-            placeholder="Correct answer"
-          />
-        )}
+      <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">
+        <p className="font-semibold">Quick MCQ mode</p>
+        <p className="mt-1">
+          Every save creates a fast single-correct MCQ. Difficulty, tags, and
+          status are temporarily hidden and handled automatically in backend.
+        </p>
+      </div>
 
-        <input
-          value={tags}
-          onChange={(e) => setTags(e.target.value)}
-          className="rounded-xl border px-4 py-3"
-          placeholder="Tags separated by commas"
+      <div className="space-y-2">
+        <label className="text-sm font-semibold text-slate-800">
+          Question text
+        </label>
+        <textarea
+          value={form.questionText}
+          onChange={(event) => updateField("questionText", event.target.value)}
+          className="min-h-36 w-full rounded-2xl border px-4 py-3"
+          placeholder="Enter the full question here"
+          required
         />
       </div>
 
-      <textarea
-        value={explanation}
-        onChange={(e) => setExplanation(e.target.value)}
-        className="min-h-28 w-full rounded-xl border px-4 py-3"
-        placeholder="Explanation / solution"
-      />
+      <div className="space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-800">Options</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Tap the circle in front of an option to mark it as the correct answer.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          {ANSWER_OPTIONS.map((item) => (
+            <label
+              key={item.key}
+              className={`flex items-center gap-3 rounded-2xl border px-4 py-3 transition ${
+                form.correctAnswer === item.key
+                  ? "border-emerald-300 bg-emerald-50"
+                  : "border-slate-200 bg-white"
+              }`}
+            >
+              <input
+                type="radio"
+                name="correctAnswer"
+                value={item.key}
+                checked={form.correctAnswer === item.key}
+                onChange={() => updateField("correctAnswer", item.key)}
+                className="h-4 w-4"
+                required
+              />
+
+              <span className="w-7 shrink-0 text-sm font-semibold text-slate-600">
+                {item.label}.
+              </span>
+
+              <input
+                value={form[item.field]}
+                onChange={(event) => updateField(item.field, event.target.value)}
+                className="w-full bg-transparent text-sm outline-none"
+                placeholder={`Option ${item.label}`}
+                required
+              />
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-semibold text-slate-800">
+          Explanation / solution (optional)
+        </label>
+        <textarea
+          value={form.explanation}
+          onChange={(event) => updateField("explanation", event.target.value)}
+          className="min-h-28 w-full rounded-2xl border px-4 py-3"
+          placeholder="Add a short explanation if needed"
+        />
+      </div>
 
       <div className="flex flex-wrap gap-3">
         <button
@@ -298,8 +278,8 @@ export function QuestionForm({
               ? "Updating..."
               : "Saving..."
             : mode === "edit"
-            ? "Update Question"
-            : "Save Question"}
+            ? "Update MCQ"
+            : "Save MCQ"}
         </button>
 
         <button
@@ -307,7 +287,7 @@ export function QuestionForm({
           onClick={() => router.push("/admin/questions")}
           className="rounded-xl border px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
         >
-          Cancel
+          {mode === "edit" ? "Cancel" : "View Question Bank"}
         </button>
       </div>
     </form>

@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 
-import { QuestionForm, type QuestionFormInitialValues } from "@/components/forms/question-form";
+import {
+  QuestionForm,
+  type QuestionFormInitialValues,
+} from "@/components/forms/question-form";
 import { PageShell } from "@/components/shared/page-shell";
 import { fetchInternalApi } from "@/lib/server-api";
 
@@ -29,8 +32,8 @@ export default async function EditQuestionPage({
 
   return (
     <PageShell
-      title="Edit Question"
-      description="Update a real question using the live admin backend API."
+      title="Edit MCQ"
+      description="Update the question text, options, correct answer, and explanation using the simplified fast-entry workflow."
     >
       {!result.success || !result.data ? (
         <div className="rounded-3xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">

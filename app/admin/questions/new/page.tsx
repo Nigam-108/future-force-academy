@@ -4,8 +4,8 @@ import { PageShell } from "@/components/shared/page-shell";
 export default function NewQuestionPage() {
   return (
     <PageShell
-      title="Create Question"
-      description="Add a real question into the admin question bank using the live backend API."
+      title="Quick Add MCQ"
+      description="Fast-entry mode for creating many single-correct questions without extra admin fields."
     >
       <div className="rounded-3xl border bg-white p-6 shadow-sm">
         <QuestionForm mode="create" />
