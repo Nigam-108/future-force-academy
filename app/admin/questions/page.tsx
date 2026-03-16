@@ -1,5 +1,5 @@
 import Link from "next/link";
-
+import { DeleteQuestionButton } from "@/components/admin/delete-question-button";
 import { PageShell } from "@/components/shared/page-shell";
 import { fetchInternalApi } from "@/lib/server-api";
 
@@ -9,23 +9,9 @@ type QuestionsPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-type QuestionType =
-  | "SINGLE_CORRECT"
-  | "TRUE_FALSE"
-  | "ASSERTION_REASON"
-  | "MULTI_CORRECT"
-  | "MATCH_THE_FOLLOWING";
-
-type DifficultyLevel = "EASY" | "MEDIUM" | "HARD";
-
-type QuestionStatus = "DRAFT" | "APPROVED" | "ACTIVE" | "REJECTED";
-
 type AdminQuestionsResponse = {
   items: Array<{
     id: string;
-    type: QuestionType;
-    difficulty: DifficultyLevel;
-    status: QuestionStatus;
     questionText: string;
     optionA: string | null;
     optionB: string | null;
@@ -33,15 +19,9 @@ type AdminQuestionsResponse = {
     optionD: string | null;
     correctAnswer: string | null;
     explanation: string | null;
-    tags: string[];
     createdAt: string;
     updatedAt: string;
     createdBy: {
-      id: string;
-      fullName: string;
-      email: string;
-    } | null;
-    approvedBy: {
       id: string;
       fullName: string;
       email: string;
@@ -62,19 +42,14 @@ function buildPageHref(
   nextPage: number
 ) {
   const params = new URLSearchParams();
-
   const search = getSingleValue(currentSearchParams.search);
-  const type = getSingleValue(currentSearchParams.type);
-  const difficulty = getSingleValue(currentSearchParams.difficulty);
-  const status = getSingleValue(currentSearchParams.status);
 
-  if (search) params.set("search", search);
-  if (type) params.set("type", type);
-  if (difficulty) params.set("difficulty", difficulty);
-  if (status) params.set("status", status);
+  if (search) {
+    params.set("search", search);
+  }
 
   params.set("page", String(nextPage));
-  params.set("limit", "10");
+  params.set("limit", "20");
 
   return `/admin/questions?${params.toString()}`;
 }
@@ -86,52 +61,7 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
-function typeBadgeClass(type: QuestionType) {
-  switch (type) {
-    case "SINGLE_CORRECT":
-      return "bg-blue-50 text-blue-700 ring-blue-200";
-    case "MULTI_CORRECT":
-      return "bg-violet-50 text-violet-700 ring-violet-200";
-    case "TRUE_FALSE":
-      return "bg-emerald-50 text-emerald-700 ring-emerald-200";
-    case "ASSERTION_REASON":
-      return "bg-amber-50 text-amber-700 ring-amber-200";
-    case "MATCH_THE_FOLLOWING":
-      return "bg-pink-50 text-pink-700 ring-pink-200";
-    default:
-      return "bg-slate-100 text-slate-700 ring-slate-200";
-  }
-}
-
-function statusBadgeClass(status: QuestionStatus) {
-  switch (status) {
-    case "ACTIVE":
-      return "bg-emerald-50 text-emerald-700 ring-emerald-200";
-    case "APPROVED":
-      return "bg-sky-50 text-sky-700 ring-sky-200";
-    case "DRAFT":
-      return "bg-amber-50 text-amber-700 ring-amber-200";
-    case "REJECTED":
-      return "bg-rose-50 text-rose-700 ring-rose-200";
-    default:
-      return "bg-slate-100 text-slate-700 ring-slate-200";
-  }
-}
-
-function difficultyBadgeClass(difficulty: DifficultyLevel) {
-  switch (difficulty) {
-    case "EASY":
-      return "bg-emerald-50 text-emerald-700 ring-emerald-200";
-    case "MEDIUM":
-      return "bg-amber-50 text-amber-700 ring-amber-200";
-    case "HARD":
-      return "bg-rose-50 text-rose-700 ring-rose-200";
-    default:
-      return "bg-slate-100 text-slate-700 ring-slate-200";
-  }
-}
-
-function truncateText(text: string, limit = 180) {
+function truncateText(text: string, limit = 220) {
   if (text.length <= limit) {
     return text;
   }
@@ -145,89 +75,60 @@ function QuestionCard({
   question: AdminQuestionsResponse["items"][number];
 }) {
   return (
-    <article className="rounded-3xl border bg-white p-5 shadow-sm">
+    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-2">
-          <div className="flex flex-wrap gap-2 text-xs font-medium">
-            <span
-              className={`rounded-full px-3 py-1 ring-1 ${typeBadgeClass(
-                question.type
-              )}`}
-            >
-              {question.type}
-            </span>
-            <span
-              className={`rounded-full px-3 py-1 ring-1 ${difficultyBadgeClass(
-                question.difficulty
-              )}`}
-            >
-              {question.difficulty}
-            </span>
-            <span
-              className={`rounded-full px-3 py-1 ring-1 ${statusBadgeClass(
-                question.status
-              )}`}
-            >
-              {question.status}
-            </span>
-          </div>
-
-          <h2 className="text-base font-semibold leading-7 text-slate-900">
-            {truncateText(question.questionText, 220)}
+        <div className="space-y-3">
+          <h2 className="text-xl font-semibold text-slate-900">
+            {truncateText(question.questionText)}
           </h2>
-        </div>
 
-        <Link
-          href={`/admin/questions/${question.id}/edit`}
-          className="inline-flex items-center justify-center rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Edit
-        </Link>
-      </div>
-
-      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border bg-slate-50 p-3">
-          <div className="text-xs text-slate-500">Correct Answer</div>
-          <div className="mt-1 text-sm font-semibold text-slate-900">
-            {question.correctAnswer || "—"}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border bg-slate-50 p-3">
-          <div className="text-xs text-slate-500">Created By</div>
-          <div className="mt-1 text-sm font-semibold text-slate-900">
-            {question.createdBy?.fullName || "—"}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border bg-slate-50 p-3">
-          <div className="text-xs text-slate-500">Approved By</div>
-          <div className="mt-1 text-sm font-semibold text-slate-900">
-            {question.approvedBy?.fullName || "—"}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border bg-slate-50 p-3">
-          <div className="text-xs text-slate-500">Created At</div>
-          <div className="mt-1 text-sm font-semibold text-slate-900">
-            {formatDateTime(question.createdAt)}
-          </div>
-        </div>
-      </div>
-
-      {question.tags.length > 0 ? (
-        <div className="mt-4 flex flex-wrap gap-2">
-          {question.tags.map((tag) => (
-            <span
-              key={`${question.id}-${tag}`}
-              className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700"
-            >
-              #{tag}
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
+              Correct: {question.correctAnswer || "—"}
             </span>
-          ))}
+            <span className="rounded-full bg-sky-100 px-3 py-1 text-sky-700">
+              Updated: {formatDateTime(question.updatedAt)}
+            </span>
+            <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700">
+              By: {question.createdBy?.fullName || "—"}
+            </span>
+          </div>
         </div>
-      ) : null}
-    </article>
+
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href={`/admin/questions/${question.id}/edit`}
+            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Edit
+          </Link>
+
+          <DeleteQuestionButton
+            questionId={question.id}
+            questionText={question.questionText}
+          />
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
+          <p className="font-semibold text-slate-900">Options</p>
+          <div className="mt-2 space-y-1">
+            <p>A. {question.optionA || "—"}</p>
+            <p>B. {question.optionB || "—"}</p>
+            <p>C. {question.optionC || "—"}</p>
+            <p>D. {question.optionD || "—"}</p>
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
+          <p className="font-semibold text-slate-900">Explanation</p>
+          <p className="mt-2">
+            {question.explanation?.trim() || "No explanation added."}
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -235,22 +136,16 @@ export default async function QuestionsPage({
   searchParams,
 }: QuestionsPageProps) {
   const resolvedSearchParams = (await searchParams) ?? {};
-
   const page = getSingleValue(resolvedSearchParams.page) || "1";
-  const limit = getSingleValue(resolvedSearchParams.limit) || "10";
+  const limit = getSingleValue(resolvedSearchParams.limit) || "20";
   const search = getSingleValue(resolvedSearchParams.search) || "";
-  const type = getSingleValue(resolvedSearchParams.type) || "";
-  const difficulty = getSingleValue(resolvedSearchParams.difficulty) || "";
-  const status = getSingleValue(resolvedSearchParams.status) || "";
 
   const result = await fetchInternalApi<AdminQuestionsResponse>(
     `/api/admin/questions?page=${encodeURIComponent(
       page
     )}&limit=${encodeURIComponent(limit)}${
       search ? `&search=${encodeURIComponent(search)}` : ""
-    }${type ? `&type=${encodeURIComponent(type)}` : ""}${
-      difficulty ? `&difficulty=${encodeURIComponent(difficulty)}` : ""
-    }${status ? `&status=${encodeURIComponent(status)}` : ""}`
+    }`
   );
 
   const data = result.data;
@@ -259,166 +154,116 @@ export default async function QuestionsPage({
   return (
     <PageShell
       title="Question Bank"
-      description="Manage your real backend question bank with search and filters."
+      description="Minimal question list with fast edit and safe delete actions."
     >
-      <div className="mb-6 flex flex-wrap gap-3">
-        <Link
-          href="/admin/questions/new"
-          className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
-        >
-          Add Question
-        </Link>
-        <Link
-          href="/admin/questions/import"
-          className="inline-flex items-center justify-center rounded-xl border px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Import Questions
-        </Link>
-      </div>
-
-      <form
-        method="GET"
-        className="mb-6 grid gap-4 rounded-3xl border bg-white p-5 shadow-sm lg:grid-cols-5"
-      >
-        <input
-          name="search"
-          defaultValue={search}
-          className="rounded-xl border px-4 py-3"
-          placeholder="Search question text, explanation, tag"
-        />
-
-        <select
-          name="type"
-          defaultValue={type}
-          className="rounded-xl border px-4 py-3"
-        >
-          <option value="">All Types</option>
-          <option value="SINGLE_CORRECT">Single Correct</option>
-          <option value="MULTI_CORRECT">Multi Correct</option>
-          <option value="TRUE_FALSE">True / False</option>
-          <option value="ASSERTION_REASON">Assertion Reason</option>
-          <option value="MATCH_THE_FOLLOWING">Match the Following</option>
-        </select>
-
-        <select
-          name="difficulty"
-          defaultValue={difficulty}
-          className="rounded-xl border px-4 py-3"
-        >
-          <option value="">All Difficulty</option>
-          <option value="EASY">Easy</option>
-          <option value="MEDIUM">Medium</option>
-          <option value="HARD">Hard</option>
-        </select>
-
-        <select
-          name="status"
-          defaultValue={status}
-          className="rounded-xl border px-4 py-3"
-        >
-          <option value="">All Status</option>
-          <option value="DRAFT">Draft</option>
-          <option value="APPROVED">Approved</option>
-          <option value="ACTIVE">Active</option>
-          <option value="REJECTED">Rejected</option>
-        </select>
-
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            className="flex-1 rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white hover:bg-slate-800"
-          >
-            Apply Filters
-          </button>
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <form className="flex w-full max-w-2xl gap-3">
+            <input
+              type="text"
+              name="search"
+              defaultValue={search}
+              placeholder="Search question text"
+              className="w-full rounded-2xl border px-4 py-3"
+            />
+            <button
+              type="submit"
+              className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+            >
+              Search
+            </button>
+          </form>
 
           <Link
-            href="/admin/questions"
-            className="rounded-xl border px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            href="/admin/questions/new"
+            className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
           >
-            Reset
+            Add Question
           </Link>
         </div>
-      </form>
 
-      {!result.success || !data ? (
-        <div className="rounded-3xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-700">
-          {result.message}
-        </div>
-      ) : data.items.length === 0 ? (
-        <div className="rounded-3xl border bg-white p-8 text-center shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">
-            No questions found
-          </h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Try changing the filters or add/import fresh questions first.
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="mb-4 grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border bg-white p-4 shadow-sm">
-              <div className="text-xs text-slate-500">Total Questions</div>
-              <div className="mt-1 text-xl font-bold text-slate-900">
-                {data.total}
-              </div>
-            </div>
-            <div className="rounded-2xl border bg-white p-4 shadow-sm">
-              <div className="text-xs text-slate-500">Current Page</div>
-              <div className="mt-1 text-xl font-bold text-slate-900">
-                {data.page}
-              </div>
-            </div>
-            <div className="rounded-2xl border bg-white p-4 shadow-sm">
-              <div className="text-xs text-slate-500">Page Size</div>
-              <div className="mt-1 text-xl font-bold text-slate-900">
-                {data.limit}
-              </div>
-            </div>
+        {!result.success || !data ? (
+          <div className="rounded-3xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
+            {result.message}
           </div>
-
-          <div className="grid gap-5">
-            {data.items.map((question) => (
-              <QuestionCard key={question.id} question={question} />
-            ))}
+        ) : data.items.length === 0 ? (
+          <div className="rounded-3xl border border-dashed bg-white p-10 text-center">
+            <h2 className="text-xl font-semibold text-slate-900">
+              No questions found
+            </h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Try another search or add fresh questions.
+            </p>
           </div>
-
-          {data.totalPages > 1 ? (
-            <div className="mt-6 flex items-center justify-between rounded-2xl border bg-white p-4 shadow-sm">
-              <div className="text-sm text-slate-600">
-                Page {data.page} of {data.totalPages}
+        ) : (
+          <>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-2xl border bg-white p-4 shadow-sm">
+                <p className="text-sm text-slate-500">Total Questions</p>
+                <p className="mt-1 text-2xl font-semibold text-slate-900">
+                  {data.total}
+                </p>
               </div>
 
-              <div className="flex gap-2">
-                {currentPage > 1 ? (
-                  <Link
-                    href={buildPageHref(resolvedSearchParams, currentPage - 1)}
-                    className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    Previous
-                  </Link>
-                ) : (
-                  <span className="cursor-not-allowed rounded-xl border px-4 py-2 text-sm font-medium text-slate-400">
-                    Previous
-                  </span>
-                )}
+              <div className="rounded-2xl border bg-white p-4 shadow-sm">
+                <p className="text-sm text-slate-500">Current Page</p>
+                <p className="mt-1 text-2xl font-semibold text-slate-900">
+                  {data.page}
+                </p>
+              </div>
 
-                {currentPage < data.totalPages ? (
-                  <Link
-                    href={buildPageHref(resolvedSearchParams, currentPage + 1)}
-                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-                  >
-                    Next
-                  </Link>
-                ) : (
-                  <span className="cursor-not-allowed rounded-xl bg-slate-200 px-4 py-2 text-sm font-medium text-slate-500">
-                    Next
-                  </span>
-                )}
+              <div className="rounded-2xl border bg-white p-4 shadow-sm">
+                <p className="text-sm text-slate-500">Visible On Page</p>
+                <p className="mt-1 text-2xl font-semibold text-slate-900">
+                  {data.items.length}
+                </p>
               </div>
             </div>
-          ) : null}
-        </>
-      )}
+
+            <div className="space-y-4">
+              {data.items.map((question) => (
+                <QuestionCard key={question.id} question={question} />
+              ))}
+            </div>
+
+            {data.totalPages > 1 ? (
+              <div className="flex items-center justify-between rounded-2xl border bg-white px-4 py-3 text-sm shadow-sm">
+                <p className="text-slate-600">
+                  Page {data.page} of {data.totalPages}
+                </p>
+
+                <div className="flex gap-3">
+                  {currentPage > 1 ? (
+                    <Link
+                      href={buildPageHref(resolvedSearchParams, currentPage - 1)}
+                      className="rounded-xl border px-4 py-2 font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Previous
+                    </Link>
+                  ) : (
+                    <span className="rounded-xl border px-4 py-2 text-slate-400">
+                      Previous
+                    </span>
+                  )}
+
+                  {currentPage < data.totalPages ? (
+                    <Link
+                      href={buildPageHref(resolvedSearchParams, currentPage + 1)}
+                      className="rounded-xl border px-4 py-2 font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Next
+                    </Link>
+                  ) : (
+                    <span className="rounded-xl border px-4 py-2 text-slate-400">
+                      Next
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
     </PageShell>
   );
 }

@@ -1,8 +1,14 @@
-import { DifficultyLevel, QuestionStatus, QuestionType } from "@prisma/client";
+import {
+  DifficultyLevel,
+  QuestionStatus,
+  QuestionType,
+} from "@prisma/client";
 import { AppError } from "@/server/utils/errors";
 import {
   createQuestionRecord,
+  deleteQuestionRecord,
   findQuestionById,
+  findQuestionDeleteImpact,
   listQuestionRecords,
   updateQuestionRecord,
 } from "@/server/repositories/question.repository";
@@ -66,4 +72,26 @@ export async function updateQuestion(id: string, input: UpdateQuestionInput) {
     explanation: input.explanation,
     tags: existingQuestion.tags ?? [],
   });
+}
+
+export async function deleteQuestion(id: string) {
+  const existingQuestion = await findQuestionDeleteImpact(id);
+
+  if (!existingQuestion) {
+    throw new AppError("Question not found", 404);
+  }
+
+  if (existingQuestion._count.testQuestions > 0) {
+    throw new AppError(
+      "Cannot delete this question because it is already assigned to one or more tests. Remove it from tests first.",
+      409
+    );
+  }
+
+  const deleted = await deleteQuestionRecord(id);
+
+  return {
+    deletedQuestionId: deleted.id,
+    deletedQuestionText: deleted.questionText,
+  };
 }

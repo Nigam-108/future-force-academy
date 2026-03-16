@@ -3,6 +3,7 @@ import { requireAdmin } from "@/server/auth/guards";
 import { fail, ok } from "@/server/utils/api-response";
 import { AppError } from "@/server/utils/errors";
 import {
+  deleteQuestion,
   getQuestionById,
   updateQuestion,
 } from "@/server/services/question.service";
@@ -59,6 +60,22 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to update question";
+
+    return fail(message, getStatusCode(error));
+  }
+}
+
+export async function DELETE(_request: NextRequest, context: RouteContext) {
+  try {
+    await requireAdmin();
+
+    const { id } = await context.params;
+    const result = await deleteQuestion(id);
+
+    return ok("Question deleted successfully", result, 200);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to delete question";
 
     return fail(message, getStatusCode(error));
   }

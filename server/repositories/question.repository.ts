@@ -131,3 +131,28 @@ export async function updateQuestionRecord(
     include: questionInclude,
   });
 }
+
+export async function findQuestionDeleteImpact(id: string) {
+  return prisma.question.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      questionText: true,
+      _count: {
+        select: {
+          testQuestions: true,
+        },
+      },
+    },
+  });
+}
+
+export async function deleteQuestionRecord(id: string) {
+  return prisma.question.delete({
+    where: { id },
+    select: {
+      id: true,
+      questionText: true,
+    },
+  });
+}

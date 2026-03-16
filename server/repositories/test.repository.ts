@@ -30,6 +30,14 @@ const testInclude = {
 export async function findTestBySlug(slug: string) {
   return prisma.test.findUnique({
     where: { slug },
+    include: testInclude,
+  });
+}
+
+export async function findTestById(id: string) {
+  return prisma.test.findUnique({
+    where: { id },
+    include: testInclude,
   });
 }
 
@@ -48,6 +56,29 @@ export async function createTestRecord(data: {
   endAt?: Date;
 }) {
   return prisma.test.create({
+    data,
+    include: testInclude,
+  });
+}
+
+export async function updateTestRecord(
+  id: string,
+  data: {
+    title: string;
+    slug: string;
+    description?: string;
+    mode: TestMode;
+    structureType: TestStructureType;
+    visibilityStatus: TestVisibilityStatus;
+    totalQuestions: number;
+    totalMarks: number;
+    durationInMinutes?: number;
+    startAt?: Date;
+    endAt?: Date;
+  }
+) {
+  return prisma.test.update({
+    where: { id },
     data,
     include: testInclude,
   });
@@ -87,7 +118,9 @@ export async function listTestRecords(filters: {
         }
       : {}),
     ...(filters.mode ? { mode: filters.mode } : {}),
-    ...(filters.structureType ? { structureType: filters.structureType } : {}),
+    ...(filters.structureType
+      ? { structureType: filters.structureType }
+      : {}),
     ...(filters.visibilityStatus
       ? { visibilityStatus: filters.visibilityStatus }
       : {}),
@@ -113,36 +146,6 @@ export async function listTestRecords(filters: {
     limit: filters.limit,
     totalPages: Math.ceil(total / filters.limit),
   };
-}
-
-export async function findTestById(id: string) {
-  return prisma.test.findUnique({
-    where: { id },
-    include: testInclude,
-  });
-}
-
-export async function updateTestRecord(
-  id: string,
-  data: {
-    title: string;
-    slug: string;
-    description?: string;
-    mode: TestMode;
-    structureType: TestStructureType;
-    visibilityStatus: TestVisibilityStatus;
-    totalQuestions: number;
-    totalMarks: number;
-    durationInMinutes?: number;
-    startAt?: Date;
-    endAt?: Date;
-  }
-) {
-  return prisma.test.update({
-    where: { id },
-    data,
-    include: testInclude,
-  });
 }
 
 export async function listStudentVisibleTestRecords(filters: {
@@ -187,18 +190,8 @@ export async function listStudentVisibleTestRecords(filters: {
       where,
       skip,
       take: filters.limit,
-      orderBy: [{ startAt: "asc" }, { createdAt: "desc" }],
-      include: {
-        sections: {
-          orderBy: { displayOrder: "asc" },
-        },
-        _count: {
-          select: {
-            testQuestions: true,
-            attempts: true,
-          },
-        },
-      },
+      orderBy: { createdAt: "desc" },
+      include: testInclude,
     }),
     prisma.test.count({ where }),
   ]);
@@ -210,4 +203,33 @@ export async function listStudentVisibleTestRecords(filters: {
     limit: filters.limit,
     totalPages: Math.ceil(total / filters.limit),
   };
+}
+
+export async function findTestDeleteImpact(id: string) {
+  return prisma.test.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      title: true,
+      slug: true,
+      _count: {
+        select: {
+          sections: true,
+          testQuestions: true,
+          attempts: true,
+        },
+      },
+    },
+  });
+}
+
+export async function deleteTestRecord(id: string) {
+  return prisma.test.delete({
+    where: { id },
+    select: {
+      id: true,
+      title: true,
+      slug: true,
+    },
+  });
 }

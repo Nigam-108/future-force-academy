@@ -2,8 +2,10 @@ import { TestMode } from "@prisma/client";
 import { AppError } from "@/server/utils/errors";
 import {
   createTestRecord,
+  deleteTestRecord,
   findTestById,
   findTestBySlug,
+  findTestDeleteImpact,
   listStudentVisibleTestRecords,
   listTestRecords,
   updateTestRecord,
@@ -62,10 +64,12 @@ export async function updateTest(id: string, input: UpdateTestInput) {
     throw new AppError("Test not found", 404);
   }
 
-  const slugOwner = await findTestBySlug(input.slug);
+  if (input.slug !== existingTest.slug) {
+    const slugConflict = await findTestBySlug(input.slug);
 
-  if (slugOwner && slugOwner.id !== id) {
-    throw new AppError("A test with this slug already exists", 409);
+    if (slugConflict && slugConflict.id !== id) {
+      throw new AppError("A test with this slug already exists", 409);
+    }
   }
 
   return updateTestRecord(id, {
@@ -142,5 +146,30 @@ export async function listStudentTests(input: ListStudentTestsQueryInput) {
     ...result,
     items: filteredItems,
     filteredCount: filteredItems.length,
+  };
+}
+
+export async function deleteTest(id: string) {
+  const existingTest = await findTestDeleteImpact(id);
+
+  if (!existingTest) {
+    throw new AppError("Test not found", 404);
+  }
+
+  if (existingTest._count.attempts > 0) {
+    throw new AppError(
+      "Cannot delete this test because student attempts already exist. Close it instead.",
+      409
+    );
+  }
+
+  const deleted = await deleteTestRecord(id);
+
+  return {
+    deletedTestId: deleted.id,
+    deletedTitle: deleted.title,
+    deletedSlug: deleted.slug,
+    removedSections: existingTest._count.sections,
+    removedAssignedQuestions: existingTest._count.testQuestions,
   };
 }
