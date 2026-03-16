@@ -1,4 +1,17 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
+
+const assignedQuestionInclude = {
+  question: true,
+  section: true,
+} satisfies Prisma.TestQuestionInclude;
+
+export type UpdateAssignedTestQuestionRecordInput = {
+  sectionId?: string | null;
+  displayOrder?: number;
+  positiveMarks?: number | null;
+  negativeMarks?: number | null;
+};
 
 export async function findTestForQuestionAssignment(testId: string) {
   return prisma.test.findUnique({
@@ -9,10 +22,7 @@ export async function findTestForQuestionAssignment(testId: string) {
       },
       testQuestions: {
         orderBy: { displayOrder: "asc" },
-        include: {
-          question: true,
-          section: true,
-        },
+        include: assignedQuestionInclude,
       },
     },
   });
@@ -77,10 +87,7 @@ export async function createAssignedTestQuestions(params: {
     return tx.testQuestion.findMany({
       where: { testId: params.testId },
       orderBy: { displayOrder: "asc" },
-      include: {
-        question: true,
-        section: true,
-      },
+      include: assignedQuestionInclude,
     });
   });
 }
@@ -89,9 +96,24 @@ export async function listAssignedTestQuestions(testId: string) {
   return prisma.testQuestion.findMany({
     where: { testId },
     orderBy: { displayOrder: "asc" },
-    include: {
-      question: true,
-      section: true,
-    },
+    include: assignedQuestionInclude,
+  });
+}
+
+export async function updateAssignedTestQuestionById(
+  assignmentId: string,
+  data: UpdateAssignedTestQuestionRecordInput
+) {
+  return prisma.testQuestion.update({
+    where: { id: assignmentId },
+    data,
+    include: assignedQuestionInclude,
+  });
+}
+
+export async function deleteAssignedTestQuestionById(assignmentId: string) {
+  return prisma.testQuestion.delete({
+    where: { id: assignmentId },
+    include: assignedQuestionInclude,
   });
 }
