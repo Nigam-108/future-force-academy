@@ -1,17 +1,25 @@
 import { TestMode, TestStructureType, TestVisibilityStatus } from "@prisma/client";
 import { z } from "zod";
 
-export const createTestSchema = z
+const testBaseSchema = z
   .object({
-    title: z.string().min(3, "Title must be at least 3 characters long."),
+    title: z.string().trim().min(3, "Title must be at least 3 characters long."),
     slug: z
       .string()
+      .trim()
       .min(3, "Slug must be at least 3 characters long.")
-      .regex(/^[a-z0-9-]+$/, "Slug must contain only lowercase letters, numbers, and hyphens."),
-    description: z.string().optional(),
+      .regex(
+        /^[a-z0-9-]+$/,
+        "Slug must contain only lowercase letters, numbers, and hyphens."
+      ),
+    description: z.string().trim().optional(),
     mode: z.nativeEnum(TestMode).default(TestMode.PRACTICE),
-    structureType: z.nativeEnum(TestStructureType).default(TestStructureType.SINGLE),
-    visibilityStatus: z.nativeEnum(TestVisibilityStatus).default(TestVisibilityStatus.DRAFT),
+    structureType: z
+      .nativeEnum(TestStructureType)
+      .default(TestStructureType.SINGLE),
+    visibilityStatus: z
+      .nativeEnum(TestVisibilityStatus)
+      .default(TestVisibilityStatus.DRAFT),
     totalQuestions: z.coerce.number().int().min(0).default(0),
     totalMarks: z.coerce.number().min(0).default(0),
     durationInMinutes: z.coerce.number().int().min(1).optional(),
@@ -33,14 +41,18 @@ export const createTestSchema = z
     }
   });
 
+export const createTestSchema = testBaseSchema;
+export const updateTestSchema = testBaseSchema;
+
 export const listTestsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(10),
-  search: z.string().optional(),
+  search: z.string().trim().optional(),
   mode: z.nativeEnum(TestMode).optional(),
   structureType: z.nativeEnum(TestStructureType).optional(),
   visibilityStatus: z.nativeEnum(TestVisibilityStatus).optional(),
 });
 
 export type CreateTestInput = z.infer<typeof createTestSchema>;
+export type UpdateTestInput = z.infer<typeof updateTestSchema>;
 export type ListTestsQueryInput = z.infer<typeof listTestsQuerySchema>;

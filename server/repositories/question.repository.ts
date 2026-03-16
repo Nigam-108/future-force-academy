@@ -1,10 +1,27 @@
 import {
+  DifficultyLevel,
   Prisma,
   QuestionStatus,
   QuestionType,
-  DifficultyLevel,
 } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
+
+const questionInclude = {
+  createdBy: {
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+    },
+  },
+  approvedBy: {
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+    },
+  },
+} satisfies Prisma.QuestionInclude;
 
 export async function createQuestionRecord(data: {
   createdById: string;
@@ -22,15 +39,7 @@ export async function createQuestionRecord(data: {
 }) {
   return prisma.question.create({
     data,
-    include: {
-      createdBy: {
-        select: {
-          id: true,
-          fullName: true,
-          email: true,
-        },
-      },
-    },
+    include: questionInclude,
   });
 }
 
@@ -46,9 +55,23 @@ export async function listQuestionRecords(filters: {
     ...(filters.search
       ? {
           OR: [
-            { questionText: { contains: filters.search, mode: "insensitive" } },
-            { explanation: { contains: filters.search, mode: "insensitive" } },
-            { tags: { has: filters.search } },
+            {
+              questionText: {
+                contains: filters.search,
+                mode: "insensitive",
+              },
+            },
+            {
+              explanation: {
+                contains: filters.search,
+                mode: "insensitive",
+              },
+            },
+            {
+              tags: {
+                has: filters.search,
+              },
+            },
           ],
         }
       : {}),
@@ -65,22 +88,7 @@ export async function listQuestionRecords(filters: {
       skip,
       take: filters.limit,
       orderBy: { createdAt: "desc" },
-      include: {
-        createdBy: {
-          select: {
-            id: true,
-            fullName: true,
-            email: true,
-          },
-        },
-        approvedBy: {
-          select: {
-            id: true,
-            fullName: true,
-            email: true,
-          },
-        },
-      },
+      include: questionInclude,
     }),
     prisma.question.count({ where }),
   ]);
@@ -92,4 +100,34 @@ export async function listQuestionRecords(filters: {
     limit: filters.limit,
     totalPages: Math.ceil(total / filters.limit),
   };
+}
+
+export async function findQuestionById(id: string) {
+  return prisma.question.findUnique({
+    where: { id },
+    include: questionInclude,
+  });
+}
+
+export async function updateQuestionRecord(
+  id: string,
+  data: {
+    type: QuestionType;
+    difficulty: DifficultyLevel;
+    status: QuestionStatus;
+    questionText: string;
+    optionA?: string;
+    optionB?: string;
+    optionC?: string;
+    optionD?: string;
+    correctAnswer?: string;
+    explanation?: string;
+    tags: string[];
+  }
+) {
+  return prisma.question.update({
+    where: { id },
+    data,
+    include: questionInclude,
+  });
 }

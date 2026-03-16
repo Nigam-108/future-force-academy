@@ -7,15 +7,31 @@ type TestMode = "PRACTICE" | "LIVE" | "ASSIGNED";
 type TestStructureType = "SINGLE" | "SECTIONAL";
 type TestVisibilityStatus = "DRAFT" | "LIVE" | "CLOSED";
 
-type TestBuilderFormProps = {
-  mode?: "create" | "edit-placeholder";
-};
-
 type ApiResponse<T> = {
   success: boolean;
   message: string;
   data: T | null;
   errors?: unknown;
+};
+
+export type TestBuilderFormInitialValues = {
+  title: string;
+  slug: string;
+  description: string | null;
+  mode: TestMode;
+  structureType: TestStructureType;
+  visibilityStatus: TestVisibilityStatus;
+  totalQuestions: number;
+  totalMarks: number;
+  durationInMinutes: number | null;
+  startAt: string | null;
+  endAt: string | null;
+};
+
+type TestBuilderFormProps = {
+  mode?: "create" | "edit";
+  testId?: string;
+  initialValues?: TestBuilderFormInitialValues;
 };
 
 const TEST_MODES: TestMode[] = ["PRACTICE", "LIVE", "ASSIGNED"];
@@ -31,34 +47,68 @@ function slugify(value: string) {
     .replace(/-+/g, "-");
 }
 
+function toDatetimeLocalValue(value: string | null) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+  const pad = (num: number) => String(num).padStart(2, "0");
+
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 export function TestBuilderForm({
   mode = "create",
+  testId,
+  initialValues,
 }: TestBuilderFormProps) {
   const router = useRouter();
 
-  const [title, setTitle] = useState("");
-  const [slug, setSlug] = useState("");
-  const [description, setDescription] = useState("");
-  const [testMode, setTestMode] = useState<TestMode>("PRACTICE");
-  const [structureType, setStructureType] =
-    useState<TestStructureType>("SINGLE");
+  const [title, setTitle] = useState(initialValues?.title ?? "");
+  const [slug, setSlug] = useState(initialValues?.slug ?? "");
+  const [description, setDescription] = useState(
+    initialValues?.description ?? ""
+  );
+  const [testMode, setTestMode] = useState<TestMode>(
+    initialValues?.mode ?? "PRACTICE"
+  );
+  const [structureType, setStructureType] = useState<TestStructureType>(
+    initialValues?.structureType ?? "SINGLE"
+  );
   const [visibilityStatus, setVisibilityStatus] =
-    useState<TestVisibilityStatus>("DRAFT");
-  const [totalQuestions, setTotalQuestions] = useState("0");
-  const [totalMarks, setTotalMarks] = useState("0");
-  const [durationInMinutes, setDurationInMinutes] = useState("");
-  const [startAt, setStartAt] = useState("");
-  const [endAt, setEndAt] = useState("");
+    useState<TestVisibilityStatus>(
+      initialValues?.visibilityStatus ?? "DRAFT"
+    );
+  const [totalQuestions, setTotalQuestions] = useState(
+    String(initialValues?.totalQuestions ?? 0)
+  );
+  const [totalMarks, setTotalMarks] = useState(
+    String(initialValues?.totalMarks ?? 0)
+  );
+  const [durationInMinutes, setDurationInMinutes] = useState(
+    initialValues?.durationInMinutes
+      ? String(initialValues.durationInMinutes)
+      : ""
+  );
+  const [startAt, setStartAt] = useState(
+    toDatetimeLocalValue(initialValues?.startAt ?? null)
+  );
+  const [endAt, setEndAt] = useState(
+    toDatetimeLocalValue(initialValues?.endAt ?? null)
+  );
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    if (mode !== "create") {
-      return;
-    }
 
     setSubmitting(true);
     setErrorMessage(null);
@@ -82,8 +132,15 @@ export function TestBuilderForm({
         endAt: endAt ? new Date(endAt).toISOString() : undefined,
       };
 
-      const response = await fetch("/api/admin/tests", {
-        method: "POST",
+      const url =
+        mode === "edit" && testId
+          ? `/api/admin/tests/${testId}`
+          : "/api/admin/tests";
+
+      const method = mode === "edit" ? "PATCH" : "POST";
+
+      const response = await fetch(url, {
+        method,
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
@@ -96,14 +153,14 @@ export function TestBuilderForm({
       }> | null;
 
       if (!response.ok || !json?.success) {
-        throw new Error(json?.message || "Failed to create test.");
+        throw new Error(json?.message || "Failed to save test.");
       }
 
       router.push("/admin/tests");
       router.refresh();
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Failed to create test."
+        error instanceof Error ? error.message : "Failed to save test."
       );
     } finally {
       setSubmitting(false);
@@ -124,6 +181,7 @@ export function TestBuilderForm({
           onChange={(e) => {
             const nextTitle = e.target.value;
             setTitle(nextTitle);
+
             if (!slug.trim()) {
               setSlug(slugify(nextTitle));
             }
@@ -249,10 +307,16 @@ export function TestBuilderForm({
       <div className="flex flex-wrap gap-3">
         <button
           type="submit"
-          disabled={submitting || mode !== "create"}
+          disabled={submitting}
           className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
         >
-          {submitting ? "Saving..." : "Create Test"}
+          {submitting
+            ? mode === "edit"
+              ? "Updating..."
+              : "Saving..."
+            : mode === "edit"
+            ? "Update Test"
+            : "Create Test"}
         </button>
 
         <button

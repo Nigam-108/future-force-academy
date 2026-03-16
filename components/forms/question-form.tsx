@@ -13,15 +13,31 @@ type QuestionType =
 type DifficultyLevel = "EASY" | "MEDIUM" | "HARD";
 type QuestionStatus = "DRAFT" | "APPROVED" | "ACTIVE" | "REJECTED";
 
-type QuestionFormProps = {
-  mode?: "create" | "edit-placeholder";
-};
-
 type ApiResponse<T> = {
   success: boolean;
   message: string;
   data: T | null;
   errors?: unknown;
+};
+
+export type QuestionFormInitialValues = {
+  type: QuestionType;
+  difficulty: DifficultyLevel;
+  status: QuestionStatus;
+  questionText: string;
+  optionA: string | null;
+  optionB: string | null;
+  optionC: string | null;
+  optionD: string | null;
+  correctAnswer: string | null;
+  explanation: string | null;
+  tags: string[];
+};
+
+type QuestionFormProps = {
+  mode?: "create" | "edit";
+  questionId?: string;
+  initialValues?: QuestionFormInitialValues;
 };
 
 const QUESTION_TYPES: QuestionType[] = [
@@ -35,23 +51,38 @@ const QUESTION_TYPES: QuestionType[] = [
 const DIFFICULTIES: DifficultyLevel[] = ["EASY", "MEDIUM", "HARD"];
 const STATUSES: QuestionStatus[] = ["DRAFT", "APPROVED", "ACTIVE", "REJECTED"];
 
-export function QuestionForm({ mode = "create" }: QuestionFormProps) {
+export function QuestionForm({
+  mode = "create",
+  questionId,
+  initialValues,
+}: QuestionFormProps) {
   const router = useRouter();
 
-  const [type, setType] = useState<QuestionType>("SINGLE_CORRECT");
-  const [difficulty, setDifficulty] = useState<DifficultyLevel>("MEDIUM");
-  const [status, setStatus] = useState<QuestionStatus>("DRAFT");
-  const [questionText, setQuestionText] = useState("");
-  const [optionA, setOptionA] = useState("");
-  const [optionB, setOptionB] = useState("");
-  const [optionC, setOptionC] = useState("");
-  const [optionD, setOptionD] = useState("");
-  const [correctAnswer, setCorrectAnswer] = useState("");
-  const [explanation, setExplanation] = useState("");
-  const [tags, setTags] = useState("");
+  const [type, setType] = useState<QuestionType>(
+    initialValues?.type ?? "SINGLE_CORRECT"
+  );
+  const [difficulty, setDifficulty] = useState<DifficultyLevel>(
+    initialValues?.difficulty ?? "MEDIUM"
+  );
+  const [status, setStatus] = useState<QuestionStatus>(
+    initialValues?.status ?? "DRAFT"
+  );
+  const [questionText, setQuestionText] = useState(
+    initialValues?.questionText ?? ""
+  );
+  const [optionA, setOptionA] = useState(initialValues?.optionA ?? "");
+  const [optionB, setOptionB] = useState(initialValues?.optionB ?? "");
+  const [optionC, setOptionC] = useState(initialValues?.optionC ?? "");
+  const [optionD, setOptionD] = useState(initialValues?.optionD ?? "");
+  const [correctAnswer, setCorrectAnswer] = useState(
+    initialValues?.correctAnswer ?? ""
+  );
+  const [explanation, setExplanation] = useState(
+    initialValues?.explanation ?? ""
+  );
+  const [tags, setTags] = useState((initialValues?.tags ?? []).join(", "));
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const isOptionBased =
     type === "SINGLE_CORRECT" || type === "MULTI_CORRECT";
@@ -71,13 +102,8 @@ export function QuestionForm({ mode = "create" }: QuestionFormProps) {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (mode !== "create") {
-      return;
-    }
-
     setSubmitting(true);
     setErrorMessage(null);
-    setSuccessMessage(null);
 
     try {
       const payload = {
@@ -97,8 +123,15 @@ export function QuestionForm({ mode = "create" }: QuestionFormProps) {
           .filter(Boolean),
       };
 
-      const response = await fetch("/api/admin/questions", {
-        method: "POST",
+      const url =
+        mode === "edit" && questionId
+          ? `/api/admin/questions/${questionId}`
+          : "/api/admin/questions";
+
+      const method = mode === "edit" ? "PATCH" : "POST";
+
+      const response = await fetch(url, {
+        method,
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
@@ -111,16 +144,14 @@ export function QuestionForm({ mode = "create" }: QuestionFormProps) {
       }> | null;
 
       if (!response.ok || !json?.success) {
-        throw new Error(json?.message || "Failed to create question.");
+        throw new Error(json?.message || "Failed to save question.");
       }
-
-      setSuccessMessage("Question created successfully.");
 
       router.push("/admin/questions");
       router.refresh();
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Failed to create question."
+        error instanceof Error ? error.message : "Failed to save question."
       );
     } finally {
       setSubmitting(false);
@@ -132,12 +163,6 @@ export function QuestionForm({ mode = "create" }: QuestionFormProps) {
       {errorMessage ? (
         <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
           {errorMessage}
-        </div>
-      ) : null}
-
-      {successMessage ? (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-          {successMessage}
         </div>
       ) : null}
 
@@ -265,10 +290,16 @@ export function QuestionForm({ mode = "create" }: QuestionFormProps) {
       <div className="flex flex-wrap gap-3">
         <button
           type="submit"
-          disabled={submitting || mode !== "create"}
+          disabled={submitting}
           className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
         >
-          {submitting ? "Saving..." : "Save Question"}
+          {submitting
+            ? mode === "edit"
+              ? "Updating..."
+              : "Saving..."
+            : mode === "edit"
+            ? "Update Question"
+            : "Save Question"}
         </button>
 
         <button
