@@ -37,6 +37,9 @@ function getSingleValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+/**
+ * Builds pagination link while preserving current search query.
+ */
 function buildPageHref(
   currentSearchParams: Record<string, string | string[] | undefined>,
   nextPage: number
@@ -69,6 +72,9 @@ function truncateText(text: string, limit = 220) {
   return `${text.slice(0, limit)}...`;
 }
 
+/**
+ * Single reusable card component for each question row.
+ */
 function QuestionCard({
   question,
 }: {
@@ -154,7 +160,7 @@ export default async function QuestionsPage({
   return (
     <PageShell
       title="Question Bank"
-      description="Minimal question list with fast edit and safe delete actions."
+      description="Minimal question list with fast add, bulk import, edit and safe delete actions."
     >
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -174,12 +180,21 @@ export default async function QuestionsPage({
             </button>
           </form>
 
-          <Link
-            href="/admin/questions/new"
-            className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
-          >
-            Add Question
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/admin/questions/import"
+              className="rounded-xl border px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Bulk Import
+            </Link>
+
+            <Link
+              href="/admin/questions/new"
+              className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+            >
+              Add Question
+            </Link>
+          </div>
         </div>
 
         {!result.success || !data ? (
@@ -192,7 +207,7 @@ export default async function QuestionsPage({
               No questions found
             </h2>
             <p className="mt-2 text-sm text-slate-600">
-              Try another search or add fresh questions.
+              Try another search, add fresh questions, or use bulk import.
             </p>
           </div>
         ) : (
