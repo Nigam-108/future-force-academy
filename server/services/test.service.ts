@@ -1,14 +1,10 @@
-/**
- * Important workflow note:
- * totalQuestions and totalMarks are currently system-managed fields.
- * During test creation/editing, admin does not manually control them from UI.
- * They are initialized safely and can later be recalculated from assigned questions.
- */
-import { TestMode } from "@prisma/client";
+import { TestMode, TestVisibilityStatus } from "@prisma/client";
 import { AppError } from "@/server/utils/errors";
 import {
   createTestRecord,
   deleteTestRecord,
+  duplicateTestRecord,
+  findTestBlueprintForDuplication,
   findTestById,
   findTestBySlug,
   findTestDeleteImpact,
@@ -25,6 +21,34 @@ import type {
   ListStudentTestsQueryInput,
   StudentTestStatus,
 } from "@/server/validations/student-test.schema";
+
+/**
+ * Converts any title into a slug-safe format.
+ */
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+}
+
+/**
+ * Builds a unique slug by appending -copy, -copy-2, etc.
+ */
+async function buildUniqueDuplicateSlug(baseTitle: string) {
+  const baseSlug = slugify(baseTitle);
+  let candidate = `${baseSlug}-copy`;
+  let counter = 2;
+
+  while (await findTestBySlug(candidate)) {
+    candidate = `${baseSlug}-copy-${counter}`;
+    counter += 1;
+  }
+
+  return candidate;
+}
 
 export async function createTest(input: CreateTestInput, actorId: string) {
   const existingTest = await findTestBySlug(input.slug);
@@ -91,6 +115,44 @@ export async function updateTest(id: string, input: UpdateTestInput) {
     startAt: input.startAt ? new Date(input.startAt) : undefined,
     endAt: input.endAt ? new Date(input.endAt) : undefined,
   });
+}
+
+/**
+ * Duplicates an existing test into a new DRAFT test.
+ *
+ * What gets copied:
+ * - core test settings
+ * - sections
+ * - assigned questions
+ * - totals
+ *
+ * What does NOT get copied:
+ * - attempts
+ * - results
+ * - rankings
+ */
+export async function duplicateTest(id: string, actorId: string) {
+  const sourceTest = await findTestBlueprintForDuplication(id);
+
+  if (!sourceTest) {
+    throw new AppError("Test not found", 404);
+  }
+
+  const newTitle = `${sourceTest.title} Copy`;
+  const newSlug = await buildUniqueDuplicateSlug(sourceTest.title);
+
+  const duplicated = await duplicateTestRecord({
+    sourceTest,
+    newTitle,
+    newSlug,
+    createdById: actorId,
+  });
+
+  if (!duplicated) {
+    throw new AppError("Failed to duplicate test", 500);
+  }
+
+  return duplicated;
 }
 
 function deriveStudentTestStatus(test: {

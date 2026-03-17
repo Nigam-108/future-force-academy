@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { DeleteTestButton } from "@/components/admin/delete-test-button";
+import { DuplicateTestButton } from "@/components/admin/duplicate-test-button";
 import { PageShell } from "@/components/shared/page-shell";
 import { fetchInternalApi } from "@/lib/server-api";
 
@@ -168,6 +169,8 @@ function TestCard({ test }: { test: AdminTestsResponse["items"][number] }) {
             Edit
           </Link>
 
+          <DuplicateTestButton testId={test.id} title={test.title} />
+
           <DeleteTestButton testId={test.id} title={test.title} />
         </div>
       </div>
@@ -257,7 +260,7 @@ export default async function AdminTestsPage({
   return (
     <PageShell
       title="Tests"
-      description="Minimal test management page with safe delete actions."
+      description="Minimal test management page with edit, duplicate and safe delete actions."
     >
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
