@@ -77,6 +77,15 @@ type SaveAnswerResponse = {
   };
 };
 
+/**
+ * Palette color helper for question navigation buttons.
+ *
+ * Meanings:
+ * - blue: current question
+ * - green: answered
+ * - yellow: review
+ * - white: untouched/default
+ */
 function paletteClass(
   state: "current" | "attempted" | "review" | "default"
 ): string {
@@ -144,16 +153,24 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
   const [submitting, setSubmitting] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
 
+  /**
+   * saveStatus gives the student confidence that actions are being persisted.
+   *
+   * States:
+   * - idle
+   * - saving
+   * - saved
+   * - error
+   */
+  const [saveStatus, setSaveStatus] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+
   const autoSubmitTriggeredRef = useRef(false);
 
   /**
-   * Important:
-   * Use safe optional chaining on the questions array itself.
-   *
-   * Why:
-   * attemptData may exist briefly before a malformed payload is rejected,
-   * and questions may be missing if backend shape is wrong.
-   * This avoids the "reading '0'" runtime crash.
+   * Safe access to the current question.
+   * Prevents runtime crash if attempt payload is malformed.
    */
   const currentQuestion = attemptData?.questions?.[currentIndex] ?? null;
 
@@ -166,10 +183,6 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
       throw new Error(viewResponse.message || "Failed to load attempt.");
     }
 
-    /**
-     * Defensive payload validation.
-     * This gives a clearer controlled error instead of crashing later.
-     */
     if (!Array.isArray(viewResponse.data.questions)) {
       throw new Error("Attempt view payload is missing questions.");
     }
@@ -195,6 +208,11 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
     setCurrentIndex(0);
   }
 
+  /**
+   * Boot flow:
+   * - start/resume attempt
+   * - then load full attempt view
+   */
   useEffect(() => {
     let cancelled = false;
 
@@ -237,6 +255,10 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
     };
   }, [testId]);
 
+  /**
+   * Countdown timer.
+   * Auto-submits once time reaches zero.
+   */
   useEffect(() => {
     if (secondsLeft === null) {
       return;
@@ -272,6 +294,12 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
   const reviewCount = useMemo(() => {
     return (
       attemptData?.questions?.filter((item) => item.markedForReview).length ?? 0
+    );
+  }, [attemptData]);
+
+  const unansweredCount = useMemo(() => {
+    return (
+      attemptData?.questions?.filter((item) => !item.selectedAnswer).length ?? 0
     );
   }, [attemptData]);
 
@@ -311,6 +339,36 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
     return "default" as const;
   }
 
+  /**
+   * Finds and jumps to the first unanswered question.
+   */
+  function jumpToFirstUnanswered() {
+    if (!attemptData) return;
+
+    const index = attemptData.questions.findIndex((item) => !item.selectedAnswer);
+
+    if (index >= 0) {
+      setCurrentIndex(index);
+    }
+  }
+
+  /**
+   * Finds and jumps to the first marked-for-review question.
+   */
+  function jumpToFirstReview() {
+    if (!attemptData) return;
+
+    const index = attemptData.questions.findIndex((item) => item.markedForReview);
+
+    if (index >= 0) {
+      setCurrentIndex(index);
+    }
+  }
+
+  /**
+   * Saves answer selection and/or review state.
+   * Also updates top save-status indicator.
+   */
   async function updateAnswer(params: {
     selectedAnswer?: string | null;
     markedForReview?: boolean;
@@ -320,6 +378,7 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
     }
 
     setBusyQuestionId(currentQuestion.testQuestionId);
+    setSaveStatus("saving");
 
     try {
       const response = await apiPost<SaveAnswerResponse>(
@@ -363,15 +422,47 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
           ),
         };
       });
+
+      setSaveStatus("saved");
+
+      /**
+       * Fade "saved" back to idle after a short time.
+       */
+      window.setTimeout(() => {
+        setSaveStatus((previous) => (previous === "saved" ? "idle" : previous));
+      }, 1200);
     } catch (error) {
-      alert(
-        error instanceof Error ? error.message : "Failed to save answer."
-      );
+      setSaveStatus("error");
+      alert(error instanceof Error ? error.message : "Failed to save answer.");
     } finally {
       setBusyQuestionId(null);
     }
   }
 
+  /**
+   * Clears only the selected answer for the current question.
+   * Review flag is preserved.
+   */
+  async function handleClearAnswer() {
+    if (!currentQuestion) {
+      return;
+    }
+
+    await updateAnswer({
+      selectedAnswer: null,
+      markedForReview: currentQuestion.markedForReview,
+    });
+  }
+
+  /**
+   * Submit handler.
+   *
+   * For manual submit:
+   * - shows a summary confirmation first
+   *
+   * For auto submit:
+   * - skips confirmation dialog
+   */
   async function handleSubmit(auto = false) {
     if (!attemptData || submitting) {
       return;
@@ -379,7 +470,15 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
 
     if (!auto) {
       const confirmed = window.confirm(
-        "Submit this test now? Unanswered questions will remain unanswered."
+        [
+          "Submit this test now?",
+          "",
+          `Answered: ${answeredCount}`,
+          `Unanswered: ${unansweredCount}`,
+          `Marked for Review: ${reviewCount}`,
+          "",
+          "Unanswered questions will remain unanswered.",
+        ].join("\n")
       );
 
       if (!confirmed) {
@@ -404,9 +503,7 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
         )}`
       );
     } catch (error) {
-      alert(
-        error instanceof Error ? error.message : "Failed to submit attempt."
-      );
+      alert(error instanceof Error ? error.message : "Failed to submit attempt.");
       setSubmitting(false);
     }
   }
@@ -459,13 +556,35 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
-            <p className="text-xs uppercase tracking-wide text-slate-500">
-              Time Left
-            </p>
-            <p className="mt-1 text-xl font-semibold text-slate-900">
-              {formatTimer(secondsLeft)}
-            </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
+              <p className="text-xs uppercase tracking-wide text-slate-500">
+                Time Left
+              </p>
+              <p className="mt-1 text-xl font-semibold text-slate-900">
+                {formatTimer(secondsLeft)}
+              </p>
+            </div>
+
+            <div
+              className={`rounded-2xl border px-4 py-3 text-center text-sm font-medium ${
+                saveStatus === "saving"
+                  ? "border-blue-200 bg-blue-50 text-blue-700"
+                  : saveStatus === "saved"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : saveStatus === "error"
+                  ? "border-rose-200 bg-rose-50 text-rose-700"
+                  : "border-slate-200 bg-slate-50 text-slate-600"
+              }`}
+            >
+              {saveStatus === "saving"
+                ? "Saving..."
+                : saveStatus === "saved"
+                ? "Saved"
+                : saveStatus === "error"
+                ? "Save Failed"
+                : "Ready"}
+            </div>
           </div>
         </div>
 
@@ -490,12 +609,30 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs uppercase tracking-wide text-slate-500">
-              Total Marks
+              Unanswered
             </p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">
-              {attemptData.attempt.totalMarks}
+              {unansweredCount}
             </p>
           </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={jumpToFirstUnanswered}
+            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Jump to First Unanswered
+          </button>
+
+          <button
+            type="button"
+            onClick={jumpToFirstReview}
+            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Jump to First Review
+          </button>
         </div>
 
         <div className="mt-8">
@@ -558,6 +695,18 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
 
             <button
               type="button"
+              onClick={() => void handleClearAnswer()}
+              disabled={
+                busyQuestionId === currentQuestion.testQuestionId ||
+                !currentQuestion.selectedAnswer
+              }
+              className="rounded-xl border px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+            >
+              Clear Answer
+            </button>
+
+            <button
+              type="button"
               onClick={() =>
                 void updateAnswer({
                   markedForReview: !currentQuestion.markedForReview,
@@ -599,8 +748,8 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
           </div>
 
           <p className="mt-4 text-xs text-slate-500">
-            Selecting an option saves that answer immediately. Moving Next or
-            Previous does not auto-save by itself.
+            Selecting an option saves immediately. You can also clear an answer,
+            mark questions for review, and jump to unanswered questions quickly.
           </p>
         </div>
       </section>
