@@ -1,6 +1,16 @@
-import { AttemptStatus } from "@prisma/client";
+import { AttemptStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 
+/**
+ * Fetches a test for starting an attempt.
+ *
+ * Includes:
+ * - assigned test questions in display order
+ * - sections in display order
+ *
+ * Why:
+ * The start-attempt flow needs the question IDs to create placeholder answers.
+ */
 export async function findTestForAttemptStart(testId: string) {
   return prisma.test.findUnique({
     where: { id: testId },
@@ -23,6 +33,13 @@ export async function findTestForAttemptStart(testId: string) {
   });
 }
 
+/**
+ * Finds an existing attempt for the same test and student.
+ *
+ * Important:
+ * The schema enforces a unique pair of (testId, userId),
+ * so at most one row should exist for each student-test combination.
+ */
 export async function findAttemptByTestAndUser(testId: string, userId: string) {
   return prisma.testAttempt.findUnique({
     where: {
@@ -40,6 +57,16 @@ export async function findAttemptByTestAndUser(testId: string, userId: string) {
   });
 }
 
+/**
+ * Creates a new attempt and its placeholder answer rows.
+ *
+ * This is used only when no attempt exists yet.
+ *
+ * Note:
+ * Because the DB has a unique constraint on (testId, userId),
+ * callers should be ready to handle Prisma P2002 errors if two
+ * concurrent start requests arrive at the same time.
+ */
 export async function createAttemptWithAnswerPlaceholders(data: {
   testId: string;
   userId: string;
@@ -55,6 +82,10 @@ export async function createAttemptWithAnswerPlaceholders(data: {
       },
     });
 
+    /**
+     * Create one placeholder answer row per assigned test question.
+     * This keeps attempt navigation and answer saving simple later.
+     */
     if (data.testQuestionIds.length > 0) {
       await tx.attemptAnswer.createMany({
         data: data.testQuestionIds.map((testQuestionId) => ({
@@ -87,10 +118,22 @@ export async function createAttemptWithAnswerPlaceholders(data: {
   });
 }
 
-export async function findAttemptByIdForUser(
-  attemptId: string,
-  userId: string
-) {
+/**
+ * Helper used when a create hits a unique constraint race.
+ *
+ * Why this exists:
+ * If two "start attempt" requests happen nearly together,
+ * one request may succeed and the second may fail with P2002.
+ * We then read the already-created attempt using this function.
+ */
+export function isAttemptUniqueConstraintError(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002"
+  );
+}
+
+export async function findAttemptByIdForUser(attemptId: string, userId: string) {
   return prisma.testAttempt.findFirst({
     where: {
       id: attemptId,
@@ -99,44 +142,6 @@ export async function findAttemptByIdForUser(
     include: {
       test: true,
       answers: true,
-    },
-  });
-}
-
-export async function findAttemptViewForUser(
-  attemptId: string,
-  userId: string
-) {
-  return prisma.testAttempt.findFirst({
-    where: {
-      id: attemptId,
-      userId,
-    },
-    include: {
-      test: {
-        include: {
-          sections: {
-            orderBy: {
-              displayOrder: "asc",
-            },
-          },
-          _count: {
-            select: {
-              testQuestions: true,
-            },
-          },
-        },
-      },
-      answers: {
-        include: {
-          testQuestion: {
-            include: {
-              section: true,
-              question: true,
-            },
-          },
-        },
-      },
     },
   });
 }
@@ -209,9 +214,7 @@ export async function findAttemptForSubmission(
     include: {
       test: true,
       answers: {
-        orderBy: {
-          createdAt: "asc",
-        },
+        orderBy: { createdAt: "asc" },
         include: {
           testQuestion: {
             include: {
@@ -240,19 +243,13 @@ export async function finalizeAttemptWithResult(params: {
   return prisma.$transaction(async (tx) => {
     for (const answerResult of params.answerResults) {
       await tx.attemptAnswer.update({
-        where: {
-          id: answerResult.answerId,
-        },
-        data: {
-          isCorrect: answerResult.isCorrect,
-        },
+        where: { id: answerResult.answerId },
+        data: { isCorrect: answerResult.isCorrect },
       });
     }
 
     return tx.testAttempt.update({
-      where: {
-        id: params.attemptId,
-      },
+      where: { id: params.attemptId },
       data: {
         status: AttemptStatus.SUBMITTED,
         submittedAt: new Date(),
