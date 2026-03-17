@@ -100,7 +100,7 @@ const DEFAULT_POSITIVE_MARKS = "1";
 const DEFAULT_NEGATIVE_MARKS = "0.25";
 
 /**
- * Small helper for trimming long text in cards and tray rows.
+ * Trims long question text for cards / tray rows.
  */
 function truncateText(text: string, limit = 140) {
   if (text.length <= limit) {
@@ -110,9 +110,6 @@ function truncateText(text: string, limit = 140) {
   return `${text.slice(0, limit)}...`;
 }
 
-/**
- * Basic GET wrapper used throughout this screen.
- */
 async function apiGet<T>(url: string): Promise<ApiResponse<T>> {
   const response = await fetch(url, {
     method: "GET",
@@ -132,9 +129,6 @@ async function apiGet<T>(url: string): Promise<ApiResponse<T>> {
   };
 }
 
-/**
- * Basic POST wrapper used for assignment actions.
- */
 async function apiPost<T>(url: string, body: unknown): Promise<ApiResponse<T>> {
   const response = await fetch(url, {
     method: "POST",
@@ -155,9 +149,6 @@ async function apiPost<T>(url: string, body: unknown): Promise<ApiResponse<T>> {
   };
 }
 
-/**
- * Basic DELETE wrapper for removing already-assigned rows.
- */
 async function apiDelete<T>(url: string): Promise<ApiResponse<T>> {
   const response = await fetch(url, {
     method: "DELETE",
@@ -189,22 +180,30 @@ export function TestQuestionAssignmentClient({
   const [questionPool, setQuestionPool] = useState<AvailableQuestion[]>([]);
   const [questionPoolLoading, setQuestionPoolLoading] = useState(true);
 
+  /**
+   * searchInput:
+   * - the text currently typed by admin
+   *
+   * appliedSearch:
+   * - the text currently used to fetch visible results
+   *
+   * This separation gives better search UX and makes refresh behavior predictable.
+   */
   const [searchInput, setSearchInput] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
 
   /**
    * selectedQuestionIds:
-   * - stores all question IDs selected by the admin
-   * - survives across multiple different searches
-   * - acts as the real assignment source of truth
+   * - persistent selection across multiple searches
+   * - the actual source used for tray assignment
    */
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
 
   /**
    * selectedQuestionMap:
-   * - stores actual question objects for selected IDs
-   * - lets us show a tray even when that question is no longer visible
-   *   in the current search result set
+   * - stores selected question objects
+   * - allows tray rendering even when selected questions are no longer visible
+   *   in the current filtered question bank result set
    */
   const [selectedQuestionMap, setSelectedQuestionMap] = useState<
     Record<string, AvailableQuestion>
@@ -215,12 +214,16 @@ export function TestQuestionAssignmentClient({
   const [negativeMarks, setNegativeMarks] = useState(DEFAULT_NEGATIVE_MARKS);
   const [submitting, setSubmitting] = useState(false);
 
+  /**
+   * Separate loading state for one-click visible assignment.
+   */
+  const [assigningVisible, setAssigningVisible] = useState(false);
+
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   /**
-   * Fast lookup of already-assigned question IDs.
-   * These should never appear as assignable in the visible pool.
+   * Assigned question IDs should never appear as assignable in the bank.
    */
   const assignedQuestionIds = useMemo(
     () => new Set(assigned.map((item) => item.questionId)),
@@ -228,7 +231,7 @@ export function TestQuestionAssignmentClient({
   );
 
   /**
-   * Only show questions that are not yet assigned to this test.
+   * Visible question pool after removing already-assigned items.
    */
   const visibleQuestionPool = useMemo(
     () => questionPool.filter((item) => !assignedQuestionIds.has(item.id)),
@@ -236,7 +239,7 @@ export function TestQuestionAssignmentClient({
   );
 
   /**
-   * Materialized selected question list from our persistent map.
+   * Selected question objects rendered in the tray.
    */
   const selectedQuestions = useMemo(() => {
     return selectedQuestionIds
@@ -245,16 +248,15 @@ export function TestQuestionAssignmentClient({
   }, [selectedQuestionIds, selectedQuestionMap]);
 
   /**
-   * Useful quick count for currently visible and selectable results.
+   * IDs for only the currently visible search result set.
    */
-  const visibleSelectableQuestionIds = useMemo(() => {
-    return visibleQuestionPool.map((item) => item.id);
-  }, [visibleQuestionPool]);
+  const visibleSelectableQuestionIds = useMemo(
+    () => visibleQuestionPool.map((item) => item.id),
+    [visibleQuestionPool]
+  );
 
   /**
-   * Whether every currently visible result is selected.
-   * This applies only to the current filtered result set,
-   * not to all selected questions globally.
+   * Whether every currently visible result is already selected.
    */
   const allVisibleSelected =
     visibleSelectableQuestionIds.length > 0 &&
@@ -266,7 +268,7 @@ export function TestQuestionAssignmentClient({
   }
 
   /**
-   * Adds or removes one question from the persistent selection state.
+   * Keeps tray selection persistent across searches.
    */
   function toggleQuestionSelection(question: AvailableQuestion) {
     clearFeedback();
@@ -291,11 +293,7 @@ export function TestQuestionAssignmentClient({
   }
 
   /**
-   * Selects every currently visible question.
-   *
-   * Important:
-   * This does NOT remove already-selected questions from previous searches.
-   * It adds to the persistent tray.
+   * Adds every currently visible result into the persistent tray.
    */
   function selectAllVisible() {
     clearFeedback();
@@ -316,8 +314,7 @@ export function TestQuestionAssignmentClient({
   }
 
   /**
-   * Clears selection only for currently visible search results.
-   * Useful when admin selected a result set accidentally.
+   * Clears only current search result selection from tray.
    */
   function clearVisibleSelection() {
     clearFeedback();
@@ -336,7 +333,7 @@ export function TestQuestionAssignmentClient({
   }
 
   /**
-   * Clears all selections globally.
+   * Clears full tray.
    */
   function clearAllSelection() {
     clearFeedback();
@@ -345,7 +342,7 @@ export function TestQuestionAssignmentClient({
   }
 
   /**
-   * Removes one selected question directly from the selected tray.
+   * Removes one selected question directly from tray.
    */
   function removeSelectedQuestion(questionId: string) {
     clearFeedback();
@@ -361,9 +358,6 @@ export function TestQuestionAssignmentClient({
     });
   }
 
-  /**
-   * Loads already-assigned rows for the current test.
-   */
   async function loadAssigned() {
     setAssignedLoading(true);
     setErrorMessage(null);
@@ -380,8 +374,7 @@ export function TestQuestionAssignmentClient({
       setAssigned(response.data.items);
 
       /**
-       * If some selected question got assigned in another action,
-       * remove it from selection tray automatically.
+       * Auto-remove anything from tray that has now become assigned.
        */
       const assignedIds = new Set(response.data.items.map((item) => item.questionId));
 
@@ -409,14 +402,6 @@ export function TestQuestionAssignmentClient({
     }
   }
 
-  /**
-   * Loads the searchable question bank.
-   *
-   * Current repo behavior:
-   * - only ACTIVE questions
-   * - limit 100
-   * - optional text search
-   */
   async function loadQuestionPool(nextSearch?: string) {
     setQuestionPoolLoading(true);
     setErrorMessage(null);
@@ -444,8 +429,7 @@ export function TestQuestionAssignmentClient({
       setQuestionPool(response.data.items);
 
       /**
-       * Keep selected map fresh for any selected IDs appearing
-       * in the current result set.
+       * Refresh selectedQuestionMap for any selected items now visible.
        */
       setSelectedQuestionMap((previous) => {
         const next = { ...previous };
@@ -474,9 +458,6 @@ export function TestQuestionAssignmentClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [testId]);
 
-  /**
-   * Applies the current search input to the visible question bank.
-   */
   async function handleSearch() {
     clearFeedback();
     setAppliedSearch(searchInput);
@@ -484,27 +465,34 @@ export function TestQuestionAssignmentClient({
   }
 
   /**
-   * Assigns every currently selected question from the tray.
-   *
-   * Important:
-   * This does NOT depend on the currently visible search result.
-   * So admin can build a multi-search selection set and assign all together.
+   * Shared validation before any assignment action.
    */
-  async function handleAssignSelected() {
-    if (selectedQuestionIds.length === 0) {
+  function validateAssignmentContext(selectedCount: number) {
+    if (selectedCount === 0) {
       setErrorMessage("Select at least one question first.");
-      return;
+      return false;
     }
 
     if (structureType === "SECTIONAL" && sections.length === 0) {
       setErrorMessage(
         "This is a sectional test but no sections exist yet. Create sections first."
       );
-      return;
+      return false;
     }
 
     if (structureType === "SECTIONAL" && !sectionId) {
       setErrorMessage("Select a section before assigning questions.");
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Assigns all currently selected tray items.
+   */
+  async function handleAssignSelected() {
+    if (!validateAssignmentContext(selectedQuestionIds.length)) {
       return;
     }
 
@@ -553,8 +541,76 @@ export function TestQuestionAssignmentClient({
   }
 
   /**
-   * Removes one already-assigned row from the test.
+   * One-click action:
+   * assigns every currently visible search result directly,
+   * without first moving them into the persistent tray.
+   *
+   * This is the fastest workflow when admin wants:
+   * "whatever is visible right now -> assign all"
    */
+  async function handleAssignAllVisible() {
+    if (!validateAssignmentContext(visibleSelectableQuestionIds.length)) {
+      return;
+    }
+
+    setAssigningVisible(true);
+    clearFeedback();
+
+    try {
+      const payload = {
+        items: visibleSelectableQuestionIds.map((questionId) => ({
+          questionId,
+          sectionId: structureType === "SECTIONAL" ? sectionId : null,
+          positiveMarks:
+            positiveMarks.trim() === "" ? null : Number(positiveMarks),
+          negativeMarks:
+            negativeMarks.trim() === "" ? null : Number(negativeMarks),
+        })),
+      };
+
+      const response = await apiPost<AssignedQuestionsResponse>(
+        `/api/admin/tests/${testId}/questions`,
+        payload
+      );
+
+      if (!response.success) {
+        throw new Error(
+          response.message || "Failed to assign visible questions to test."
+        );
+      }
+
+      setSuccessMessage(
+        `${visibleSelectableQuestionIds.length} visible question(s) assigned successfully.`
+      );
+
+      /**
+       * Remove visible items from tray if any were already selected there.
+       */
+      setSelectedQuestionIds((previous) =>
+        previous.filter((id) => !visibleSelectableQuestionIds.includes(id))
+      );
+
+      setSelectedQuestionMap((previous) => {
+        const next = { ...previous };
+        visibleSelectableQuestionIds.forEach((id) => {
+          delete next[id];
+        });
+        return next;
+      });
+
+      await loadAssigned();
+      await loadQuestionPool(appliedSearch);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to assign visible questions to test."
+      );
+    } finally {
+      setAssigningVisible(false);
+    }
+  }
+
   async function handleAssignedDelete(assignmentId: string) {
     const assignedItem = assigned.find((item) => item.id === assignmentId);
 
@@ -689,19 +745,19 @@ export function TestQuestionAssignmentClient({
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold text-slate-900">
-              Assign Selected Questions
+              Assign Questions
             </h3>
             <p className="mt-1 text-sm text-slate-600">
-              Build a tray from multiple searches, then assign everything together.
+              Use the tray for multi-search selection, or assign the whole current visible result set in one click.
             </p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
             <p className="text-xs uppercase tracking-wide text-slate-500">
-              Ready To Assign
+              Visible Results
             </p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">
-              {selectedQuestionIds.length}
+              {visibleQuestionPool.length}
             </p>
           </div>
         </div>
@@ -752,13 +808,41 @@ export function TestQuestionAssignmentClient({
             disabled={selectedQuestionIds.length === 0 || submitting}
             className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
           >
-            {submitting ? "Assigning..." : "Assign Selected"}
+            {submitting ? "Assigning Tray..." : "Assign Selected Tray"}
+          </button>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => void handleAssignAllVisible()}
+            disabled={visibleSelectableQuestionIds.length === 0 || assigningVisible}
+            className="rounded-xl border border-emerald-200 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {assigningVisible ? "Assigning Visible..." : "Assign All Visible"}
+          </button>
+
+          <button
+            type="button"
+            onClick={allVisibleSelected ? clearVisibleSelection : selectAllVisible}
+            disabled={visibleSelectableQuestionIds.length === 0}
+            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {allVisibleSelected ? "Clear Visible Selection" : "Add Visible To Tray"}
+          </button>
+
+          <button
+            type="button"
+            onClick={clearAllSelection}
+            disabled={selectedQuestionIds.length === 0}
+            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Clear Full Tray
           </button>
         </div>
 
         <p className="mt-4 text-sm text-slate-500">
-          Default marks are set to +1 and -0.25 for fast MCQ paper building, but you
-          can still change them before assigning.
+          Default marks are set to +1 and -0.25 for fast MCQ paper building, but you can still change them before assigning.
         </p>
 
         <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -768,23 +852,18 @@ export function TestQuestionAssignmentClient({
                 Selected Questions Tray
               </h4>
               <p className="mt-1 text-xs text-slate-600">
-                Selection stays preserved even when you search different keywords.
+                Selection survives across multiple searches and refreshes.
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={clearAllSelection}
-              disabled={selectedQuestionIds.length === 0}
-              className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Clear All Selected
-            </button>
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
+              Tray Count: {selectedQuestionIds.length}
+            </div>
           </div>
 
           {selectedQuestions.length === 0 ? (
             <p className="mt-4 text-sm text-slate-600">
-              No selected questions yet. Search and pick questions below to build your tray.
+              No selected questions yet. Search below and add results to the tray.
             </p>
           ) : (
             <div className="mt-4 space-y-3">
@@ -895,7 +974,7 @@ export function TestQuestionAssignmentClient({
           <div>
             <h3 className="text-lg font-semibold text-slate-900">Question Bank</h3>
             <p className="mt-1 text-sm text-slate-600">
-              Search active questions, select across multiple searches, and build one assignable tray.
+              Search active questions, keep selection across searches, and assign either the tray or the entire visible search result set.
             </p>
           </div>
 
@@ -938,15 +1017,6 @@ export function TestQuestionAssignmentClient({
         </div>
 
         <div className="mb-4 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={allVisibleSelected ? clearVisibleSelection : selectAllVisible}
-            disabled={visibleSelectableQuestionIds.length === 0}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {allVisibleSelected ? "Clear Visible Selection" : "Select All Visible"}
-          </button>
-
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700">
             Visible Results: {visibleQuestionPool.length}
           </div>
