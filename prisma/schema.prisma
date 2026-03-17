@@ -88,6 +88,11 @@ model User {
   questionsApproved Question[]   @relation("QuestionApprovedBy")
   testsCreated      Test[]
   attempts          TestAttempt[]
+  /// Batches created by this admin user.
+createdBatches      Batch[]         @relation("BatchCreatedBy")
+
+/// Batch memberships for student access grouping.
+studentBatches      StudentBatch[]  @relation("StudentBatchMembership")
 }
 
 model Question {
@@ -208,4 +213,66 @@ model AttemptAnswer {
   testQuestion   TestQuestion @relation(fields: [testQuestionId], references: [id], onDelete: Cascade)
 
   @@unique([attemptId, testQuestionId])
+}
+
+/// Exam streams supported by the academy.
+/// Add more later as your product expands.
+enum ExamType {
+  UPSC
+  GPSC
+  WPSI
+  TECHNICAL_OPERATOR
+  OTHER
+}
+
+/// Batch lifecycle status.
+enum BatchStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+}
+
+/// Main batch entity.
+///
+/// Purpose:
+/// - group students by exam/program
+/// - later link tests, payments, content access, announcements, etc.
+model Batch {
+  id               String          @id @default(cuid())
+  title            String
+  slug             String          @unique
+  description      String?
+  examType         ExamType
+  status           BatchStatus     @default(DRAFT)
+  startDate        DateTime?
+  endDate          DateTime?
+  isPaid           Boolean         @default(false)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  /// If your User model already exists, this relation assumes:
+  /// User.id is String and the admin user creates the batch.
+  createdById      String?
+  createdBy        User?           @relation("BatchCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  /// Junction relation to students.
+  studentBatches   StudentBatch[]
+}
+
+/// Junction table between student users and batches.
+///
+/// Why a junction table instead of a direct field?
+/// - one student can belong to multiple batches
+/// - future flexibility for active/inactive membership
+/// - easy auditability
+model StudentBatch {
+  id               String          @id @default(cuid())
+  studentId        String
+  batchId          String
+  assignedAt       DateTime        @default(now())
+
+  student          User            @relation("StudentBatchMembership", fields: [studentId], references: [id], onDelete: Cascade)
+  batch            Batch           @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, batchId])
 }
