@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { PrintPageActions } from "@/components/admin/print-page-actions";
+import { StateCard } from "@/components/shared/state-card";
 import { PageShell } from "@/components/shared/page-shell";
 import { fetchInternalApi } from "@/lib/server-api";
 
@@ -60,14 +61,6 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-/**
- * Paper preview page.
- *
- * Key design goals:
- * - pleasant on screen
- * - clean when printed
- * - each question block should avoid awkward page splits where possible
- */
 export default async function TestPaperPage({ params }: TestPaperPageProps) {
   const { id } = await params;
 
@@ -87,16 +80,28 @@ export default async function TestPaperPage({ params }: TestPaperPageProps) {
       description="Review the final paper in assigned order and print or save it as PDF."
     >
       {!result.success || !data ? (
-        <div className="rounded-3xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
-          {result.message}
-        </div>
+        <StateCard
+          title="Unable to load paper preview"
+          description={result.message}
+          tone="error"
+          primaryActionLabel="Back to Tests"
+          primaryActionHref="/admin/tests"
+        />
+      ) : data.questions.length === 0 ? (
+        <StateCard
+          title="No assigned questions found"
+          description="This test does not have any assigned questions yet."
+          tone="warning"
+          primaryActionLabel="Manage Questions"
+          primaryActionHref={`/admin/tests/${id}/questions`}
+          secondaryActionLabel="Back to Tests"
+          secondaryActionHref="/admin/tests"
+        />
       ) : (
         <div className="space-y-6">
           <PrintPageActions />
 
-          {/* Printable page body */}
           <div className="mx-auto max-w-5xl space-y-6 print:max-w-none">
-            {/* Header card */}
             <section className="rounded-3xl border bg-white p-6 shadow-sm print:rounded-none print:border print:shadow-none">
               <div className="border-b border-slate-200 pb-4">
                 <h1 className="text-3xl font-bold text-slate-900 print:text-2xl">
@@ -164,7 +169,6 @@ export default async function TestPaperPage({ params }: TestPaperPageProps) {
               </div>
             </section>
 
-            {/* Optional section summary */}
             {data.sections.length > 0 ? (
               <section className="rounded-3xl border bg-white p-6 shadow-sm print:rounded-none print:border print:shadow-none">
                 <h2 className="text-lg font-semibold text-slate-900">Sections</h2>
@@ -190,7 +194,6 @@ export default async function TestPaperPage({ params }: TestPaperPageProps) {
               </section>
             ) : null}
 
-            {/* Question list */}
             <section className="space-y-5">
               {data.questions.map((item) => (
                 <article

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { StateCard } from "@/components/shared/state-card";
 import { PageShell } from "@/components/shared/page-shell";
 import { fetchInternalApi } from "@/lib/server-api";
 
@@ -55,13 +56,6 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-/**
- * Admin analytics page for one test.
- *
- * Goal:
- * - provide meaningful performance insight
- * - keep the UI clean and readable
- */
 export default async function TestAnalyticsPage({
   params,
 }: AnalyticsPageProps) {
@@ -83,9 +77,13 @@ export default async function TestAnalyticsPage({
       description="Review participation and performance metrics for this test."
     >
       {!result.success || !data ? (
-        <div className="rounded-3xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
-          {result.message}
-        </div>
+        <StateCard
+          title="Unable to load analytics"
+          description={result.message}
+          tone="error"
+          primaryActionLabel="Back to Tests"
+          primaryActionHref="/admin/tests"
+        />
       ) : (
         <div className="space-y-6">
           <section className="rounded-3xl border bg-white p-6 shadow-sm">
@@ -159,9 +157,15 @@ export default async function TestAnalyticsPage({
             </h3>
 
             {data.attempts.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-600">
-                No attempts found for this test yet.
-              </p>
+              <div className="mt-4">
+                <StateCard
+                  title="No attempts yet"
+                  description="Students have not started this test yet."
+                  tone="warning"
+                  primaryActionLabel="Back to Tests"
+                  primaryActionHref="/admin/tests"
+                />
+              </div>
             ) : (
               <div className="mt-4 overflow-x-auto">
                 <table className="min-w-full border-collapse text-sm">

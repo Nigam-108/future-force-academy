@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { PrintPageActions } from "@/components/admin/print-page-actions";
+import { StateCard } from "@/components/shared/state-card";
 import { PageShell } from "@/components/shared/page-shell";
 import { fetchInternalApi } from "@/lib/server-api";
 
@@ -28,14 +29,6 @@ type AnswerKeyResponse = {
   }>;
 };
 
-/**
- * Compact printable answer-key layout.
- *
- * Goal:
- * - quicker verification
- * - cleaner print / PDF output
- * - explanations remain visible
- */
 export default async function TestAnswerKeyPage({
   params,
 }: AnswerKeyPageProps) {
@@ -57,9 +50,23 @@ export default async function TestAnswerKeyPage({
       description="Review correct answers and explanations, then print or save as PDF."
     >
       {!result.success || !data ? (
-        <div className="rounded-3xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
-          {result.message}
-        </div>
+        <StateCard
+          title="Unable to load answer key"
+          description={result.message}
+          tone="error"
+          primaryActionLabel="Back to Tests"
+          primaryActionHref="/admin/tests"
+        />
+      ) : data.questions.length === 0 ? (
+        <StateCard
+          title="No answer key available"
+          description="This test does not have any assigned questions yet."
+          tone="warning"
+          primaryActionLabel="Manage Questions"
+          primaryActionHref={`/admin/tests/${id}/questions`}
+          secondaryActionLabel="Back to Tests"
+          secondaryActionHref="/admin/tests"
+        />
       ) : (
         <div className="space-y-6">
           <PrintPageActions />

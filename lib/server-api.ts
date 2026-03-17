@@ -1,216 +1,102 @@
 import { cookies, headers } from "next/headers";
 
-export type InternalApiResponse<T = unknown> = {
-  success: boolean;
-  data: T | null;
-  message: string;
-  errors?: unknown;
+type InternalApiSuccess<T> = {
+  success: true;
   status: number;
+  message: string;
+  data: T;
+  errors?: unknown;
 };
 
-export type StudentTestMode = "PRACTICE" | "LIVE" | "ASSIGNED";
-export type StudentTestStructureType = "SINGLE" | "SECTIONAL";
-export type StudentTestVisibilityStatus = "DRAFT" | "LIVE" | "CLOSED";
-export type StudentTestStatus = "AVAILABLE" | "UPCOMING" | "LIVE" | "COMPLETED";
-
-export type StudentTestSection = {
-  id: string;
-  title: string;
-  displayOrder: number;
-  totalQuestions: number;
-  durationInMinutes: number | null;
-  positiveMarks: number | null;
-  negativeMarks: number | null;
+type InternalApiFailure = {
+  success: false;
+  status: number;
+  message: string;
+  data: null;
+  errors?: unknown;
 };
 
-export type StudentTestItem = {
-  id: string;
-  createdById: string | null;
-  title: string;
-  slug: string;
-  description: string | null;
-  mode: StudentTestMode;
-  structureType: StudentTestStructureType;
-  visibilityStatus: StudentTestVisibilityStatus;
-  totalQuestions: number;
-  totalMarks: number;
-  durationInMinutes: number | null;
-  startAt: string | null;
-  endAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  sections: StudentTestSection[];
-  _count: {
-    testQuestions: number;
-    attempts: number;
-  };
-  studentStatus: StudentTestStatus;
-};
+export type InternalApiResult<T> = InternalApiSuccess<T> | InternalApiFailure;
 
-export type StudentTestsListData = {
-  items: StudentTestItem[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-  filteredCount?: number;
-};
-
-export type StudentTestsQuery = {
-  page?: string | number;
-  limit?: string | number;
-  search?: string;
-  mode?: StudentTestMode | "";
-  studentStatus?: StudentTestStatus | "";
-};
-
-function toCookieHeader(
-  allCookies: Awaited<ReturnType<typeof cookies>> extends infer CookieStore
-    ? CookieStore
-    : never
-) {
-  return allCookies
-    .getAll()
-    .map((cookie) => `${cookie.name}=${cookie.value}`)
-    .join("; ");
-}
-
-async function getBaseUrl() {
-  const envBaseUrl =
-    process.env.NEXT_PUBLIC_APP_URL?.trim() || process.env.APP_URL?.trim();
-
-  if (envBaseUrl) {
-    return envBaseUrl.replace(/\/$/, "");
-  }
-
-  const headerStore = await headers();
-  const host = headerStore.get("x-forwarded-host") || headerStore.get("host");
-  const protocol =
-    headerStore.get("x-forwarded-proto") || (host?.includes("localhost") ? "http" : "https");
-
-  if (!host) {
-    return "http://localhost:3000";
-  }
-
-  return `${protocol}://${host}`;
-}
-
-function buildQueryString(query: StudentTestsQuery) {
-  const params = new URLSearchParams();
-
-  Object.entries(query).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && String(value).trim() !== "") {
-      params.set(key, String(value));
-    }
-  });
-
-  const queryString = params.toString();
-  return queryString ? `?${queryString}` : "";
-}
-
-export async function fetchInternalApi<T = unknown>(
-  path: string,
-  init: RequestInit = {}
-): Promise<InternalApiResponse<T>> {
+/**
+ * Safer internal API fetch helper for server components.
+ *
+ * Goals:
+ * - forward cookies to protected internal routes
+ * - never throw raw fetch/json errors into pages
+ * - always return a normalized result shape
+ */
+export async function fetchInternalApi<T>(
+  path: string
+): Promise<InternalApiResult<T>> {
   try {
-    const baseUrl = await getBaseUrl();
+    const headerStore = await headers();
     const cookieStore = await cookies();
-    const cookieHeader = toCookieHeader(cookieStore);
 
-    const requestHeaders = new Headers(init.headers);
+    const host = headerStore.get("host");
+    const protocol =
+      process.env.NODE_ENV === "development" ? "http" : "https";
 
-    if (cookieHeader && !requestHeaders.has("Cookie")) {
-      requestHeaders.set("Cookie", cookieHeader);
+    /**
+     * Fallback:
+     * Some environments may not provide host as expected.
+     */
+    if (!host) {
+      return {
+        success: false,
+        status: 500,
+        message: "Unable to resolve internal host for server request.",
+        data: null,
+      };
     }
 
-    if (!requestHeaders.has("Accept")) {
-      requestHeaders.set("Accept", "application/json");
-    }
+    const cookieHeader = cookieStore
+      .getAll()
+      .map((cookie) => `${cookie.name}=${cookie.value}`)
+      .join("; ");
 
-    const response = await fetch(`${baseUrl}${path}`, {
-      ...init,
-      headers: requestHeaders,
+    const response = await fetch(`${protocol}://${host}${path}`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+      },
       cache: "no-store",
     });
 
-    const json = (await response.json().catch(() => null)) as
-      | {
-          success?: boolean;
-          data?: T | null;
-          message?: string;
-          errors?: unknown;
-        }
-      | null;
+    const json = (await response.json().catch(() => null)) as {
+      success?: boolean;
+      message?: string;
+      data?: T | null;
+      errors?: unknown;
+    } | null;
+
+    if (!response.ok || !json?.success) {
+      return {
+        success: false,
+        status: response.status,
+        message: json?.message || "Internal API request failed.",
+        data: null,
+        errors: json?.errors,
+      };
+    }
 
     return {
-      success: Boolean(json?.success),
-      data: (json?.data ?? null) as T | null,
-      message: json?.message ?? "Unknown response",
-      errors: json?.errors,
+      success: true,
       status: response.status,
+      message: json.message || "OK",
+      data: (json.data ?? null) as T,
+      errors: json.errors,
     };
   } catch (error) {
     return {
       success: false,
-      data: null,
+      status: 500,
       message:
         error instanceof Error
           ? error.message
-          : "Failed to contact internal API.",
-      status: 500,
+          : "Unexpected internal API error.",
+      data: null,
     };
   }
-}
-
-export async function getStudentTests(
-  query: StudentTestsQuery = {}
-): Promise<InternalApiResponse<StudentTestsListData>> {
-  return fetchInternalApi<StudentTestsListData>(
-    `/api/student/tests${buildQueryString(query)}`
-  );
-}
-
-export async function getStudentTestById(
-  testId: string
-): Promise<InternalApiResponse<StudentTestItem>> {
-  const limit = 100;
-  let page = 1;
-
-  while (true) {
-    const response = await getStudentTests({ page, limit });
-
-    if (!response.success || !response.data) {
-      return {
-        success: false,
-        data: null,
-        message: response.message || "Failed to load test details.",
-        errors: response.errors,
-        status: response.status,
-      };
-    }
-
-    const match = response.data.items.find((item) => item.id === testId);
-
-    if (match) {
-      return {
-        success: true,
-        data: match,
-        message: "Test fetched successfully.",
-        status: 200,
-      };
-    }
-
-    if (page >= response.data.totalPages) {
-      break;
-    }
-
-    page += 1;
-  }
-
-  return {
-    success: false,
-    data: null,
-    message: "Test not found.",
-    status: 404,
-  };
 }
