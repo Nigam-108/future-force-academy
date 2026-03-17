@@ -7,7 +7,6 @@ import {
   findSectionsByIds,
   findTestForQuestionAssignment,
   listAssignedTestQuestions,
-  normalizeAssignedTestQuestionOrder,
   updateAssignedTestQuestionById,
   type UpdateAssignedTestQuestionRecordInput,
 } from "@/server/repositories/test-question.repository";
@@ -16,6 +15,11 @@ import type {
   UpdateAssignedTestQuestionInput,
 } from "@/server/validations/test-question.schema";
 
+/**
+ * Ensures all provided section IDs:
+ * - exist
+ * - belong to this exact test
+ */
 async function validateSectionsForTest(testId: string, sectionIds: string[]) {
   const uniqueSectionIds = [...new Set(sectionIds.filter(Boolean))];
 
@@ -38,6 +42,9 @@ async function validateSectionsForTest(testId: string, sectionIds: string[]) {
   }
 }
 
+/**
+ * Returns assigned-question page data for admin.
+ */
 export async function getAssignedQuestionsForTest(testId: string) {
   const test = await findTestForQuestionAssignment(testId);
 
@@ -53,12 +60,22 @@ export async function getAssignedQuestionsForTest(testId: string) {
       title: test.title,
       slug: test.slug,
       structureType: test.structureType,
+      totalQuestions: test.totalQuestions,
+      totalMarks: test.totalMarks,
     },
     items,
     totalAssigned: items.length,
   };
 }
 
+/**
+ * Assigns questions to the test using the simplified workflow.
+ *
+ * Important:
+ * - admin does NOT provide displayOrder
+ * - backend randomizes order automatically
+ * - totals are refreshed after assignment
+ */
 export async function assignQuestionsToTest(
   testId: string,
   input: AssignTestQuestionsInput
@@ -95,6 +112,9 @@ export async function assignQuestionsToTest(
     );
   }
 
+  /**
+   * Sectional tests require section mapping for each new row.
+   */
   if (test.structureType === TestStructureType.SECTIONAL) {
     const anyMissingSectionId = input.items.some((item) => !item.sectionId);
 
@@ -116,12 +136,19 @@ export async function assignQuestionsToTest(
       title: test.title,
       slug: test.slug,
       structureType: test.structureType,
+      totalQuestions: assigned.totals.totalQuestions,
+      totalMarks: assigned.totals.totalMarks,
     },
-    totalAssigned: assigned.length,
-    items: assigned,
+    totalAssigned: assigned.items.length,
+    items: assigned.items,
   };
 }
 
+/**
+ * Updates one assigned row and refreshes totals.
+ *
+ * Marks changes are especially important because they directly change totalMarks.
+ */
 export async function updateAssignedQuestionInTest(
   testId: string,
   assignmentId: string,
@@ -177,7 +204,11 @@ export async function updateAssignedQuestionInTest(
     patch.sectionId = null;
   }
 
-  const item = await updateAssignedTestQuestionById(assignmentId, patch);
+  const result = await updateAssignedTestQuestionById(
+    test.id,
+    assignmentId,
+    patch
+  );
 
   return {
     test: {
@@ -185,11 +216,16 @@ export async function updateAssignedQuestionInTest(
       title: test.title,
       slug: test.slug,
       structureType: test.structureType,
+      totalQuestions: result.totals.totalQuestions,
+      totalMarks: result.totals.totalMarks,
     },
-    item,
+    item: result.item,
   };
 }
 
+/**
+ * Removes one assigned row and refreshes totals.
+ */
 export async function removeAssignedQuestionFromTest(
   testId: string,
   assignmentId: string
@@ -208,8 +244,7 @@ export async function removeAssignedQuestionFromTest(
     throw new AppError("Assigned question row not found", 404);
   }
 
-  const deleted = await deleteAssignedTestQuestionById(assignmentId);
-  await normalizeAssignedTestQuestionOrder(test.id);
+  const result = await deleteAssignedTestQuestionById(test.id, assignmentId);
 
   return {
     test: {
@@ -217,9 +252,11 @@ export async function removeAssignedQuestionFromTest(
       title: test.title,
       slug: test.slug,
       structureType: test.structureType,
+      totalQuestions: result.totals.totalQuestions,
+      totalMarks: result.totals.totalMarks,
     },
-    deletedAssignmentId: deleted.id,
-    deletedQuestionId: deleted.questionId,
-    remainingAssigned: Math.max(test.testQuestions.length - 1, 0),
+    deletedAssignmentId: result.deleted.id,
+    deletedQuestionId: result.deleted.questionId,
+    remainingAssigned: result.totals.totalQuestions,
   };
 }
