@@ -1,3 +1,9 @@
+/**
+ * Important workflow note:
+ * totalQuestions and totalMarks are currently system-managed fields.
+ * During test creation/editing, admin does not manually control them from UI.
+ * They are initialized safely and can later be recalculated from assigned questions.
+ */
 import { TestMode } from "@prisma/client";
 import { AppError } from "@/server/utils/errors";
 import {

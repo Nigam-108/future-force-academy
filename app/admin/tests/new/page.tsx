@@ -1,14 +1,17 @@
-import { TestBuilderForm } from "@/components/forms/test-builder-form";
+import { TestForm } from "@/components/forms/test-builder-form";
 import { PageShell } from "@/components/shared/page-shell";
 
+/**
+ * New test page with simplified admin-first workflow.
+ */
 export default function NewTestPage() {
   return (
     <PageShell
       title="Create Test"
-      description="Create a real test record using the live admin backend API."
+      description="Create a new test quickly using only the essential fields. Question count and marks will be managed later."
     >
       <div className="rounded-3xl border bg-white p-6 shadow-sm">
-        <TestBuilderForm mode="create" />
+        <TestForm mode="create" />
       </div>
     </PageShell>
   );
