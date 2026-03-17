@@ -84,38 +84,39 @@ model User {
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
-  questionsCreated  Question[]   @relation("QuestionCreatedBy")
-  questionsApproved Question[]   @relation("QuestionApprovedBy")
+  questionsCreated  Question[]    @relation("QuestionCreatedBy")
+  questionsApproved Question[]    @relation("QuestionApprovedBy")
   testsCreated      Test[]
   attempts          TestAttempt[]
-  /// Batches created by this admin user.
-createdBatches      Batch[]         @relation("BatchCreatedBy")
 
-/// Batch memberships for student access grouping.
-studentBatches      StudentBatch[]  @relation("StudentBatchMembership")
+  /// Batches created by this admin user.
+  createdBatches Batch[] @relation("BatchCreatedBy")
+
+  /// Batch memberships for student access grouping.
+  studentBatches StudentBatch[] @relation("StudentBatchMembership")
 }
 
 model Question {
-  id             String          @id @default(cuid())
-  createdById    String?
-  approvedById   String?
-  type           QuestionType
-  difficulty     DifficultyLevel @default(MEDIUM)
-  status         QuestionStatus  @default(DRAFT)
-  questionText   String
-  optionA        String?
-  optionB        String?
-  optionC        String?
-  optionD        String?
-  correctAnswer  String?
-  explanation    String?
-  tags           String[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id            String          @id @default(cuid())
+  createdById   String?
+  approvedById  String?
+  type          QuestionType
+  difficulty    DifficultyLevel @default(MEDIUM)
+  status        QuestionStatus  @default(DRAFT)
+  questionText  String
+  optionA       String?
+  optionB       String?
+  optionC       String?
+  optionD       String?
+  correctAnswer String?
+  explanation   String?
+  tags          String[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
-  createdBy      User?           @relation("QuestionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  approvedBy     User?           @relation("QuestionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  testQuestions  TestQuestion[]
+  createdBy     User?          @relation("QuestionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedBy    User?          @relation("QuestionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  testQuestions TestQuestion[]
 }
 
 model Test {
@@ -135,10 +136,10 @@ model Test {
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
 
-  createdBy         User?                @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  sections          TestSection[]
-  testQuestions     TestQuestion[]
-  attempts          TestAttempt[]
+  createdBy     User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  sections      TestSection[]
+  testQuestions TestQuestion[]
+  attempts      TestAttempt[]
 }
 
 model TestSection {
@@ -153,24 +154,24 @@ model TestSection {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  test              Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
-  testQuestions     TestQuestion[]
+  test          Test           @relation(fields: [testId], references: [id], onDelete: Cascade)
+  testQuestions TestQuestion[]
 }
 
 model TestQuestion {
-  id             String      @id @default(cuid())
-  testId         String
-  questionId     String
-  sectionId      String?
-  displayOrder   Int         @default(0)
-  positiveMarks  Float?
-  negativeMarks  Float?
-  createdAt      DateTime    @default(now())
+  id            String   @id @default(cuid())
+  testId        String
+  questionId    String
+  sectionId     String?
+  displayOrder  Int      @default(0)
+  positiveMarks Float?
+  negativeMarks Float?
+  createdAt     DateTime @default(now())
 
-  test           Test        @relation(fields: [testId], references: [id], onDelete: Cascade)
-  question       Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  section        TestSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
-  answers        AttemptAnswer[]
+  test     Test            @relation(fields: [testId], references: [id], onDelete: Cascade)
+  question Question        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  section  TestSection?    @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  answers  AttemptAnswer[]
 
   @@unique([testId, questionId])
 }
@@ -191,26 +192,26 @@ model TestAttempt {
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
-  test               Test          @relation(fields: [testId], references: [id], onDelete: Cascade)
-  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  answers            AttemptAnswer[]
+  test    Test            @relation(fields: [testId], references: [id], onDelete: Cascade)
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers AttemptAnswer[]
 
   @@unique([testId, userId])
 }
 
 model AttemptAnswer {
-  id             String   @id @default(cuid())
-  attemptId      String
-  testQuestionId String
-  selectedAnswer String?
-  markedForReview Boolean @default(false)
-  isAnswered     Boolean  @default(false)
-  isCorrect      Boolean?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default(cuid())
+  attemptId       String
+  testQuestionId  String
+  selectedAnswer  String?
+  markedForReview Boolean  @default(false)
+  isAnswered      Boolean  @default(false)
+  isCorrect       Boolean?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  attempt        TestAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  testQuestion   TestQuestion @relation(fields: [testQuestionId], references: [id], onDelete: Cascade)
+  attempt      TestAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  testQuestion TestQuestion @relation(fields: [testQuestionId], references: [id], onDelete: Cascade)
 
   @@unique([attemptId, testQuestionId])
 }
@@ -238,25 +239,25 @@ enum BatchStatus {
 /// - group students by exam/program
 /// - later link tests, payments, content access, announcements, etc.
 model Batch {
-  id               String          @id @default(cuid())
-  title            String
-  slug             String          @unique
-  description      String?
-  examType         ExamType
-  status           BatchStatus     @default(DRAFT)
-  startDate        DateTime?
-  endDate          DateTime?
-  isPaid           Boolean         @default(false)
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  id          String      @id @default(cuid())
+  title       String
+  slug        String      @unique
+  description String?
+  examType    ExamType
+  status      BatchStatus @default(DRAFT)
+  startDate   DateTime?
+  endDate     DateTime?
+  isPaid      Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   /// If your User model already exists, this relation assumes:
   /// User.id is String and the admin user creates the batch.
-  createdById      String?
-  createdBy        User?           @relation("BatchCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?
+  createdBy   User?   @relation("BatchCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   /// Junction relation to students.
-  studentBatches   StudentBatch[]
+  studentBatches StudentBatch[]
 }
 
 /// Junction table between student users and batches.
@@ -266,13 +267,13 @@ model Batch {
 /// - future flexibility for active/inactive membership
 /// - easy auditability
 model StudentBatch {
-  id               String          @id @default(cuid())
-  studentId        String
-  batchId          String
-  assignedAt       DateTime        @default(now())
+  id         String   @id @default(cuid())
+  studentId  String
+  batchId    String
+  assignedAt DateTime @default(now())
 
-  student          User            @relation("StudentBatchMembership", fields: [studentId], references: [id], onDelete: Cascade)
-  batch            Batch           @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  student User  @relation("StudentBatchMembership", fields: [studentId], references: [id], onDelete: Cascade)
+  batch   Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
 
   @@unique([studentId, batchId])
 }
