@@ -67,6 +67,8 @@ type AssignedQuestionsResponse = {
     title: string;
     slug: string;
     structureType: TestStructureType;
+    totalQuestions?: number;
+    totalMarks?: number;
   };
   items: AssignedQuestionItem[];
   totalAssigned: number;
@@ -97,6 +99,9 @@ type Props = {
 const DEFAULT_POSITIVE_MARKS = "1";
 const DEFAULT_NEGATIVE_MARKS = "0.25";
 
+/**
+ * Small helper for trimming long text in cards and tray rows.
+ */
 function truncateText(text: string, limit = 140) {
   if (text.length <= limit) {
     return text;
@@ -105,6 +110,9 @@ function truncateText(text: string, limit = 140) {
   return `${text.slice(0, limit)}...`;
 }
 
+/**
+ * Basic GET wrapper used throughout this screen.
+ */
 async function apiGet<T>(url: string): Promise<ApiResponse<T>> {
   const response = await fetch(url, {
     method: "GET",
@@ -124,6 +132,9 @@ async function apiGet<T>(url: string): Promise<ApiResponse<T>> {
   };
 }
 
+/**
+ * Basic POST wrapper used for assignment actions.
+ */
 async function apiPost<T>(url: string, body: unknown): Promise<ApiResponse<T>> {
   const response = await fetch(url, {
     method: "POST",
@@ -144,6 +155,9 @@ async function apiPost<T>(url: string, body: unknown): Promise<ApiResponse<T>> {
   };
 }
 
+/**
+ * Basic DELETE wrapper for removing already-assigned rows.
+ */
 async function apiDelete<T>(url: string): Promise<ApiResponse<T>> {
   const response = await fetch(url, {
     method: "DELETE",
@@ -175,8 +189,27 @@ export function TestQuestionAssignmentClient({
   const [questionPool, setQuestionPool] = useState<AvailableQuestion[]>([]);
   const [questionPoolLoading, setQuestionPoolLoading] = useState(true);
 
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
+
+  /**
+   * selectedQuestionIds:
+   * - stores all question IDs selected by the admin
+   * - survives across multiple different searches
+   * - acts as the real assignment source of truth
+   */
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
+
+  /**
+   * selectedQuestionMap:
+   * - stores actual question objects for selected IDs
+   * - lets us show a tray even when that question is no longer visible
+   *   in the current search result set
+   */
+  const [selectedQuestionMap, setSelectedQuestionMap] = useState<
+    Record<string, AvailableQuestion>
+  >({});
+
   const [sectionId, setSectionId] = useState("");
   const [positiveMarks, setPositiveMarks] = useState(DEFAULT_POSITIVE_MARKS);
   const [negativeMarks, setNegativeMarks] = useState(DEFAULT_NEGATIVE_MARKS);
@@ -185,35 +218,85 @@ export function TestQuestionAssignmentClient({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  /**
+   * Fast lookup of already-assigned question IDs.
+   * These should never appear as assignable in the visible pool.
+   */
   const assignedQuestionIds = useMemo(
     () => new Set(assigned.map((item) => item.questionId)),
     [assigned]
   );
 
+  /**
+   * Only show questions that are not yet assigned to this test.
+   */
   const visibleQuestionPool = useMemo(
     () => questionPool.filter((item) => !assignedQuestionIds.has(item.id)),
     [questionPool, assignedQuestionIds]
   );
 
+  /**
+   * Materialized selected question list from our persistent map.
+   */
+  const selectedQuestions = useMemo(() => {
+    return selectedQuestionIds
+      .map((id) => selectedQuestionMap[id])
+      .filter(Boolean);
+  }, [selectedQuestionIds, selectedQuestionMap]);
+
+  /**
+   * Useful quick count for currently visible and selectable results.
+   */
+  const visibleSelectableQuestionIds = useMemo(() => {
+    return visibleQuestionPool.map((item) => item.id);
+  }, [visibleQuestionPool]);
+
+  /**
+   * Whether every currently visible result is selected.
+   * This applies only to the current filtered result set,
+   * not to all selected questions globally.
+   */
   const allVisibleSelected =
-    visibleQuestionPool.length > 0 &&
-    visibleQuestionPool.every((item) => selectedQuestionIds.includes(item.id));
+    visibleSelectableQuestionIds.length > 0 &&
+    visibleSelectableQuestionIds.every((id) => selectedQuestionIds.includes(id));
 
   function clearFeedback() {
     setErrorMessage(null);
     setSuccessMessage(null);
   }
 
-  function toggleQuestionSelection(questionId: string) {
+  /**
+   * Adds or removes one question from the persistent selection state.
+   */
+  function toggleQuestionSelection(question: AvailableQuestion) {
     clearFeedback();
 
     setSelectedQuestionIds((previous) =>
-      previous.includes(questionId)
-        ? previous.filter((item) => item !== questionId)
-        : [...previous, questionId]
+      previous.includes(question.id)
+        ? previous.filter((item) => item !== question.id)
+        : [...previous, question.id]
     );
+
+    setSelectedQuestionMap((previous) => {
+      const next = { ...previous };
+
+      if (next[question.id]) {
+        delete next[question.id];
+      } else {
+        next[question.id] = question;
+      }
+
+      return next;
+    });
   }
 
+  /**
+   * Selects every currently visible question.
+   *
+   * Important:
+   * This does NOT remove already-selected questions from previous searches.
+   * It adds to the persistent tray.
+   */
   function selectAllVisible() {
     clearFeedback();
 
@@ -222,13 +305,65 @@ export function TestQuestionAssignmentClient({
       visibleQuestionPool.forEach((item) => next.add(item.id));
       return Array.from(next);
     });
+
+    setSelectedQuestionMap((previous) => {
+      const next = { ...previous };
+      visibleQuestionPool.forEach((item) => {
+        next[item.id] = item;
+      });
+      return next;
+    });
   }
 
-  function clearSelection() {
+  /**
+   * Clears selection only for currently visible search results.
+   * Useful when admin selected a result set accidentally.
+   */
+  function clearVisibleSelection() {
+    clearFeedback();
+
+    setSelectedQuestionIds((previous) =>
+      previous.filter((id) => !visibleSelectableQuestionIds.includes(id))
+    );
+
+    setSelectedQuestionMap((previous) => {
+      const next = { ...previous };
+      visibleSelectableQuestionIds.forEach((id) => {
+        delete next[id];
+      });
+      return next;
+    });
+  }
+
+  /**
+   * Clears all selections globally.
+   */
+  function clearAllSelection() {
     clearFeedback();
     setSelectedQuestionIds([]);
+    setSelectedQuestionMap({});
   }
 
+  /**
+   * Removes one selected question directly from the selected tray.
+   */
+  function removeSelectedQuestion(questionId: string) {
+    clearFeedback();
+
+    setSelectedQuestionIds((previous) =>
+      previous.filter((item) => item !== questionId)
+    );
+
+    setSelectedQuestionMap((previous) => {
+      const next = { ...previous };
+      delete next[questionId];
+      return next;
+    });
+  }
+
+  /**
+   * Loads already-assigned rows for the current test.
+   */
   async function loadAssigned() {
     setAssignedLoading(true);
     setErrorMessage(null);
@@ -243,12 +378,26 @@ export function TestQuestionAssignmentClient({
       }
 
       setAssigned(response.data.items);
+
+      /**
+       * If some selected question got assigned in another action,
+       * remove it from selection tray automatically.
+       */
+      const assignedIds = new Set(response.data.items.map((item) => item.questionId));
+
       setSelectedQuestionIds((previous) =>
-        previous.filter(
-          (questionId) =>
-            !response.data?.items.some((item) => item.questionId === questionId)
-        )
+        previous.filter((questionId) => !assignedIds.has(questionId))
       );
+
+      setSelectedQuestionMap((previous) => {
+        const next = { ...previous };
+        Object.keys(next).forEach((id) => {
+          if (assignedIds.has(id)) {
+            delete next[id];
+          }
+        });
+        return next;
+      });
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -260,7 +409,15 @@ export function TestQuestionAssignmentClient({
     }
   }
 
-  async function loadQuestionPool() {
+  /**
+   * Loads the searchable question bank.
+   *
+   * Current repo behavior:
+   * - only ACTIVE questions
+   * - limit 100
+   * - optional text search
+   */
+  async function loadQuestionPool(nextSearch?: string) {
     setQuestionPoolLoading(true);
     setErrorMessage(null);
 
@@ -270,8 +427,10 @@ export function TestQuestionAssignmentClient({
       params.set("limit", "100");
       params.set("status", "ACTIVE");
 
-      if (search.trim()) {
-        params.set("search", search.trim());
+      const effectiveSearch = (nextSearch ?? appliedSearch).trim();
+
+      if (effectiveSearch) {
+        params.set("search", effectiveSearch);
       }
 
       const response = await apiGet<QuestionPoolResponse>(
@@ -283,6 +442,20 @@ export function TestQuestionAssignmentClient({
       }
 
       setQuestionPool(response.data.items);
+
+      /**
+       * Keep selected map fresh for any selected IDs appearing
+       * in the current result set.
+       */
+      setSelectedQuestionMap((previous) => {
+        const next = { ...previous };
+        response.data?.items.forEach((item) => {
+          if (selectedQuestionIds.includes(item.id)) {
+            next[item.id] = item;
+          }
+        });
+        return next;
+      });
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to load question bank."
@@ -297,9 +470,26 @@ export function TestQuestionAssignmentClient({
   }, [testId]);
 
   useEffect(() => {
-    void loadQuestionPool();
+    void loadQuestionPool("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [testId]);
 
+  /**
+   * Applies the current search input to the visible question bank.
+   */
+  async function handleSearch() {
+    clearFeedback();
+    setAppliedSearch(searchInput);
+    await loadQuestionPool(searchInput);
+  }
+
+  /**
+   * Assigns every currently selected question from the tray.
+   *
+   * Important:
+   * This does NOT depend on the currently visible search result.
+   * So admin can build a multi-search selection set and assign all together.
+   */
   async function handleAssignSelected() {
     if (selectedQuestionIds.length === 0) {
       setErrorMessage("Select at least one question first.");
@@ -345,10 +535,12 @@ export function TestQuestionAssignmentClient({
       setSuccessMessage(
         `${selectedQuestionIds.length} question(s) assigned successfully. Random order is handled automatically.`
       );
+
       setSelectedQuestionIds([]);
+      setSelectedQuestionMap({});
 
       await loadAssigned();
-      await loadQuestionPool();
+      await loadQuestionPool(appliedSearch);
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -360,6 +552,9 @@ export function TestQuestionAssignmentClient({
     }
   }
 
+  /**
+   * Removes one already-assigned row from the test.
+   */
   async function handleAssignedDelete(assignmentId: string) {
     const assignedItem = assigned.find((item) => item.id === assignmentId);
 
@@ -399,7 +594,7 @@ export function TestQuestionAssignmentClient({
       setSuccessMessage("Assigned question removed successfully.");
 
       await loadAssigned();
-      await loadQuestionPool();
+      await loadQuestionPool(appliedSearch);
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -442,13 +637,24 @@ export function TestQuestionAssignmentClient({
             </p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
-            <p className="text-xs uppercase tracking-wide text-slate-500">
-              Currently Assigned
-            </p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">
-              {assigned.length}
-            </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
+              <p className="text-xs uppercase tracking-wide text-slate-500">
+                Currently Assigned
+              </p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">
+                {assigned.length}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
+              <p className="text-xs uppercase tracking-wide text-slate-500">
+                Selected In Tray
+              </p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">
+                {selectedQuestionIds.length}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -486,13 +692,13 @@ export function TestQuestionAssignmentClient({
               Assign Selected Questions
             </h3>
             <p className="mt-1 text-sm text-slate-600">
-              Select questions from the bank below, then assign them in one click.
+              Build a tray from multiple searches, then assign everything together.
             </p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
             <p className="text-xs uppercase tracking-wide text-slate-500">
-              Selected
+              Ready To Assign
             </p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">
               {selectedQuestionIds.length}
@@ -550,29 +756,67 @@ export function TestQuestionAssignmentClient({
           </button>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={allVisibleSelected ? clearSelection : selectAllVisible}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            {allVisibleSelected ? "Clear Visible Selection" : "Select All Visible"}
-          </button>
-
-          <button
-            type="button"
-            onClick={clearSelection}
-            disabled={selectedQuestionIds.length === 0}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Clear All Selected
-          </button>
-        </div>
-
         <p className="mt-4 text-sm text-slate-500">
           Default marks are set to +1 and -0.25 for fast MCQ paper building, but you
           can still change them before assigning.
         </p>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h4 className="text-sm font-semibold text-slate-900">
+                Selected Questions Tray
+              </h4>
+              <p className="mt-1 text-xs text-slate-600">
+                Selection stays preserved even when you search different keywords.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={clearAllSelection}
+              disabled={selectedQuestionIds.length === 0}
+              className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Clear All Selected
+            </button>
+          </div>
+
+          {selectedQuestions.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-600">
+              No selected questions yet. Search and pick questions below to build your tray.
+            </p>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {selectedQuestions.map((question, index) => (
+                <div
+                  key={question.id}
+                  className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Selected #{index + 1}
+                    </p>
+                    <h5 className="mt-1 text-sm font-semibold text-slate-900">
+                      {truncateText(question.questionText, 160)}
+                    </h5>
+                    <p className="mt-1 text-xs text-slate-600">
+                      Correct: {question.correctAnswer || "—"}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => removeSelectedQuestion(question.id)}
+                    className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-medium text-rose-700 hover:bg-rose-50"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -651,34 +895,71 @@ export function TestQuestionAssignmentClient({
           <div>
             <h3 className="text-lg font-semibold text-slate-900">Question Bank</h3>
             <p className="mt-1 text-sm text-slate-600">
-              Loads up to 100 active questions at a time for faster bulk assignment.
+              Search active questions, select across multiple searches, and build one assignable tray.
             </p>
           </div>
 
           <button
             type="button"
-            onClick={() => void loadQuestionPool()}
+            onClick={() => void loadQuestionPool(appliedSearch)}
             className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
-            Search / Refresh
+            Refresh Results
           </button>
         </div>
 
-        <div className="mb-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="mb-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
           <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
             className="rounded-xl border px-4 py-3"
             placeholder="Search question text"
           />
 
           <button
             type="button"
-            onClick={() => void loadQuestionPool()}
+            onClick={() => void handleSearch()}
             className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
           >
             Search
           </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setSearchInput("");
+              setAppliedSearch("");
+              void loadQuestionPool("");
+            }}
+            className="rounded-xl border px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Clear Search
+          </button>
+        </div>
+
+        <div className="mb-4 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={allVisibleSelected ? clearVisibleSelection : selectAllVisible}
+            disabled={visibleSelectableQuestionIds.length === 0}
+            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {allVisibleSelected ? "Clear Visible Selection" : "Select All Visible"}
+          </button>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700">
+            Visible Results: {visibleQuestionPool.length}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700">
+            Selected Overall: {selectedQuestionIds.length}
+          </div>
+
+          {appliedSearch ? (
+            <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm text-sky-700">
+              Current Search: {appliedSearch}
+            </div>
+          ) : null}
         </div>
 
         {questionPoolLoading ? (
@@ -704,7 +985,7 @@ export function TestQuestionAssignmentClient({
                   <input
                     type="checkbox"
                     checked={checked}
-                    onChange={() => toggleQuestionSelection(question.id)}
+                    onChange={() => toggleQuestionSelection(question)}
                     className="mt-1 h-4 w-4"
                   />
 
