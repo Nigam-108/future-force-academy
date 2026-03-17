@@ -163,6 +163,20 @@ function TestCard({ test }: { test: AdminTestsResponse["items"][number] }) {
           </Link>
 
           <Link
+            href={`/admin/tests/${test.id}/paper`}
+            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            View Paper
+          </Link>
+
+          <Link
+            href={`/admin/tests/${test.id}/answer-key`}
+            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Answer Key
+          </Link>
+
+          <Link
             href={`/admin/tests/${test.id}/edit`}
             className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
@@ -260,7 +274,7 @@ export default async function AdminTestsPage({
   return (
     <PageShell
       title="Tests"
-      description="Minimal test management page with edit, duplicate and safe delete actions."
+      description="Manage tests, preview paper and answer key, duplicate, and delete safely."
     >
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
