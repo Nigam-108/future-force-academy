@@ -2,14 +2,15 @@ import { AttemptStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 
 /**
- * Fetches a test for starting an attempt.
+ * Fetches a test before starting an attempt.
  *
  * Includes:
  * - assigned test questions in display order
  * - sections in display order
  *
  * Why:
- * The start-attempt flow needs the question IDs to create placeholder answers.
+ * The start-attempt flow needs the assigned testQuestion IDs
+ * to create placeholder attempt-answer rows.
  */
 export async function findTestForAttemptStart(testId: string) {
   return prisma.test.findUnique({
@@ -34,11 +35,10 @@ export async function findTestForAttemptStart(testId: string) {
 }
 
 /**
- * Finds an existing attempt for the same test and student.
+ * Finds the unique attempt for a given (testId, userId) pair.
  *
  * Important:
- * The schema enforces a unique pair of (testId, userId),
- * so at most one row should exist for each student-test combination.
+ * The schema already enforces @@unique([testId, userId]).
  */
 export async function findAttemptByTestAndUser(testId: string, userId: string) {
   return prisma.testAttempt.findUnique({
@@ -58,14 +58,12 @@ export async function findAttemptByTestAndUser(testId: string, userId: string) {
 }
 
 /**
- * Creates a new attempt and its placeholder answer rows.
+ * Creates a new attempt and placeholder answer rows in a transaction.
  *
- * This is used only when no attempt exists yet.
- *
- * Note:
- * Because the DB has a unique constraint on (testId, userId),
- * callers should be ready to handle Prisma P2002 errors if two
- * concurrent start requests arrive at the same time.
+ * Important:
+ * If two concurrent start requests arrive, create() may throw a Prisma P2002
+ * unique error because another request may have just created the attempt.
+ * The service layer handles that gracefully.
  */
 export async function createAttemptWithAnswerPlaceholders(data: {
   testId: string;
@@ -82,10 +80,6 @@ export async function createAttemptWithAnswerPlaceholders(data: {
       },
     });
 
-    /**
-     * Create one placeholder answer row per assigned test question.
-     * This keeps attempt navigation and answer saving simple later.
-     */
     if (data.testQuestionIds.length > 0) {
       await tx.attemptAnswer.createMany({
         data: data.testQuestionIds.map((testQuestionId) => ({
@@ -119,12 +113,7 @@ export async function createAttemptWithAnswerPlaceholders(data: {
 }
 
 /**
- * Helper used when a create hits a unique constraint race.
- *
- * Why this exists:
- * If two "start attempt" requests happen nearly together,
- * one request may succeed and the second may fail with P2002.
- * We then read the already-created attempt using this function.
+ * Prisma known-request helper for unique constraint collisions.
  */
 export function isAttemptUniqueConstraintError(error: unknown) {
   return (
@@ -133,6 +122,13 @@ export function isAttemptUniqueConstraintError(error: unknown) {
   );
 }
 
+/**
+ * Lightweight fetch of an attempt owned by the user.
+ *
+ * Used by:
+ * - save answer flow
+ * - fallback lookups
+ */
 export async function findAttemptByIdForUser(attemptId: string, userId: string) {
   return prisma.testAttempt.findFirst({
     where: {
@@ -142,6 +138,58 @@ export async function findAttemptByIdForUser(attemptId: string, userId: string) 
     include: {
       test: true,
       answers: true,
+    },
+  });
+}
+
+/**
+ * Full attempt-view fetch for the student attempt player.
+ *
+ * Includes everything needed by the frontend:
+ * - test metadata
+ * - sections
+ * - answers
+ * - each answer's testQuestion
+ * - each linked question
+ * - each linked section
+ */
+export async function findAttemptViewByIdForUser(
+  attemptId: string,
+  userId: string
+) {
+  return prisma.testAttempt.findFirst({
+    where: {
+      id: attemptId,
+      userId,
+    },
+    include: {
+      test: {
+        include: {
+          sections: {
+            orderBy: { displayOrder: "asc" },
+          },
+          _count: {
+            select: {
+              testQuestions: true,
+            },
+          },
+        },
+      },
+      answers: {
+        include: {
+          testQuestion: {
+            include: {
+              question: true,
+              section: true,
+            },
+          },
+        },
+        orderBy: {
+          testQuestion: {
+            displayOrder: "asc",
+          },
+        },
+      },
     },
   });
 }

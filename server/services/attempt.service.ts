@@ -6,6 +6,7 @@ import {
   findAttemptByIdForUser,
   findAttemptByTestAndUser,
   findAttemptForSubmission,
+  findAttemptViewByIdForUser,
   findSubmittedAttemptResultForUser,
   findTestForAttemptStart,
   findTestQuestionByIdAndTest,
@@ -14,19 +15,18 @@ import {
 } from "@/server/repositories/attempt.repository";
 import type {
   GetAttemptResultQueryInput,
+  GetAttemptViewQueryInput,
   SaveAnswerInput,
   StartAttemptInput,
   SubmitAttemptInput,
 } from "@/server/validations/attempt.schema";
 
-
-
 /**
- * Ensures the test is currently available to a student.
+ * Ensures the test is available for a student right now.
  *
  * Rules:
- * - visibility must be LIVE
- * - for LIVE / ASSIGNED modes, start and end windows must be valid
+ * - test visibility must be LIVE
+ * - LIVE / ASSIGNED modes must respect start/end window
  */
 function assertTestAvailableForStudentStart(test: {
   visibilityStatus: TestVisibilityStatus;
@@ -58,25 +58,18 @@ function assertTestAvailableForStudentStart(test: {
 }
 
 /**
- * Normalizes answer letters for safe comparison.
+ * Normalizes answers before comparison.
  */
 function normalizeAnswer(value: string | null | undefined) {
   return value?.trim().toUpperCase() || null;
 }
 
 /**
- * Starts or resumes an attempt for the student.
+ * Starts or resumes a student's attempt.
  *
- * Important improvement:
- * This function is now made idempotent for real-world race conditions.
- *
- * Why:
- * Sometimes the frontend can trigger the start request twice
- * (double click, re-render, hydration retry, React dev behavior, etc).
- * Instead of throwing a Prisma unique constraint error, we:
- * - try to create the attempt
- * - if a unique conflict happens, fetch the existing attempt
- * - return it as resumed
+ * This implementation is idempotent against duplicate requests.
+ * If two start calls race, one may create successfully and the other
+ * may hit Prisma P2002. We recover by reading the already-created row.
  */
 export async function startAttempt(input: StartAttemptInput, userId: string) {
   const test = await findTestForAttemptStart(input.testId);
@@ -91,10 +84,6 @@ export async function startAttempt(input: StartAttemptInput, userId: string) {
     throw new AppError("This test has no assigned questions yet", 400);
   }
 
-  /**
-   * Fast path:
-   * if the attempt already exists, return it directly.
-   */
   const existingAttempt = await findAttemptByTestAndUser(test.id, userId);
 
   if (existingAttempt) {
@@ -108,10 +97,6 @@ export async function startAttempt(input: StartAttemptInput, userId: string) {
     throw new AppError("Attempt already completed for this test", 409);
   }
 
-  /**
-   * Create path:
-   * try to create a new attempt and answer placeholders.
-   */
   try {
     const attempt = await createAttemptWithAnswerPlaceholders({
       testId: test.id,
@@ -124,11 +109,6 @@ export async function startAttempt(input: StartAttemptInput, userId: string) {
       attempt,
     };
   } catch (error) {
-    /**
-     * Race-condition recovery path:
-     * if another parallel request already created the attempt,
-     * read it and return it safely instead of showing an error.
-     */
     if (isAttemptUniqueConstraintError(error)) {
       const recoveredAttempt = await findAttemptByTestAndUser(test.id, userId);
 
@@ -146,6 +126,67 @@ export async function startAttempt(input: StartAttemptInput, userId: string) {
 
     throw error;
   }
+}
+
+/**
+ * Returns the full attempt-view payload required by the student attempt player.
+ */
+export async function getAttemptView(
+  input: GetAttemptViewQueryInput,
+  userId: string
+) {
+  const attempt = await findAttemptViewByIdForUser(input.attemptId, userId);
+
+  if (!attempt) {
+    throw new AppError("Attempt not found", 404);
+  }
+
+  if (attempt.status !== AttemptStatus.IN_PROGRESS) {
+    throw new AppError("Attempt is not active", 409);
+  }
+
+  const questions = attempt.answers.map((answer, index) => ({
+    answerId: answer.id,
+    testQuestionId: answer.testQuestionId,
+    questionNumber: index + 1,
+    displayOrder: answer.testQuestion.displayOrder,
+    questionText: answer.testQuestion.question.questionText,
+    optionA: answer.testQuestion.question.optionA,
+    optionB: answer.testQuestion.question.optionB,
+    optionC: answer.testQuestion.question.optionC,
+    optionD: answer.testQuestion.question.optionD,
+    selectedAnswer: answer.selectedAnswer,
+    markedForReview: answer.markedForReview,
+    isAnswered: answer.isAnswered,
+    sectionTitle: answer.testQuestion.section?.title ?? null,
+    positiveMarks: answer.testQuestion.positiveMarks,
+    negativeMarks: answer.testQuestion.negativeMarks,
+  }));
+
+  return {
+    attempt: {
+      id: attempt.id,
+      testId: attempt.testId,
+      status: attempt.status,
+      startedAt: attempt.startedAt,
+      submittedAt: attempt.submittedAt,
+      title: attempt.test.title,
+      slug: attempt.test.slug,
+      mode: attempt.test.mode,
+      structureType: attempt.test.structureType,
+      totalQuestions: attempt.test._count.testQuestions,
+      totalMarks: attempt.test.totalMarks,
+      durationInMinutes: attempt.test.durationInMinutes,
+    },
+    sections: attempt.test.sections.map((section) => ({
+      id: section.id,
+      title: section.title,
+      displayOrder: section.displayOrder,
+      totalQuestions: section.totalQuestions,
+      durationInMinutes: section.durationInMinutes,
+    })),
+    questions,
+  };
 }
 
 export async function saveAnswer(input: SaveAnswerInput, userId: string) {
@@ -215,6 +256,7 @@ export async function submitAttempt(input: SubmitAttemptInput, userId: string) {
 
     if (!selected) {
       unansweredCount += 1;
+
       return {
         answerId: answer.id,
         isCorrect: null,
@@ -250,7 +292,7 @@ export async function submitAttempt(input: SubmitAttemptInput, userId: string) {
       ? Number(((totalMarksObtained / safeTotalMarks) * 100).toFixed(2))
       : 0;
 
-  const finalizedAttempt = await finalizeAttemptWithResult({
+  return finalizeAttemptWithResult({
     attemptId: attempt.id,
     correctCount,
     wrongCount,
@@ -259,8 +301,6 @@ export async function submitAttempt(input: SubmitAttemptInput, userId: string) {
     percentage,
     answerResults,
   });
-
-  return finalizedAttempt;
 }
 
 export async function getAttemptResult(
@@ -303,70 +343,5 @@ export async function getAttemptResult(
     },
     sections: attempt.test.sections,
     answerReview,
-  };
-}
-
-/**
- * Returns the full in-progress attempt view for the student.
- *
- * Used by:
- * - the attempt player screen
- * - question navigation UI
- * - loading saved answers / marked-for-review state
- *
- * Important:
- * This only allows viewing attempts that belong to the current student
- * and are still IN_PROGRESS.
- *
- * Note:
- * In the current codebase, we reuse `findAttemptByIdForUser`
- * instead of a separate `findAttemptViewForUser` repository helper.
- */
-export async function getAttemptView(
-  input: { attemptId: string },
-  userId: string
-) {
-  const attempt = await findAttemptByIdForUser(input.attemptId, userId);
-
-  if (!attempt) {
-    throw new AppError("Attempt not found", 404);
-  }
-
-  if (attempt.status !== AttemptStatus.IN_PROGRESS) {
-    throw new AppError("Attempt is not active", 409);
-  }
-
-  /**
-   * Since `findAttemptByIdForUser` returns only basic attempt + answers + test,
-   * and not the fully nested `testQuestion.question` structure,
-   * this lightweight version returns the attempt shell only.
-   *
-   * If your attempt player screen needs full question rendering,
-   * then next we should upgrade the repository function include shape.
-   */
-  return {
-    attempt: {
-      id: attempt.id,
-      testId: attempt.testId,
-      status: attempt.status,
-      startedAt: attempt.startedAt,
-      submittedAt: attempt.submittedAt,
-      title: attempt.test.title,
-      slug: attempt.test.slug,
-      mode: attempt.test.mode,
-      structureType: attempt.test.structureType,
-      totalQuestions: attempt.test.totalQuestions,
-      totalMarks: attempt.test.totalMarks,
-      durationInMinutes: attempt.test.durationInMinutes,
-    },
-    answers: attempt.answers.map((answer, index) => ({
-      answerId: answer.id,
-      testQuestionId: answer.testQuestionId,
-      questionNumber: index + 1,
-      selectedAnswer: answer.selectedAnswer,
-      markedForReview: answer.markedForReview,
-      isAnswered: answer.isAnswered,
-      isCorrect: answer.isCorrect,
-    })),
   };
 }

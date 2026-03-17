@@ -81,8 +81,11 @@ function paletteClass(
   state: "current" | "attempted" | "review" | "default"
 ): string {
   if (state === "current") return "bg-blue-600 text-white border-blue-600";
-  if (state === "attempted") return "bg-emerald-100 text-emerald-700 border-emerald-200";
-  if (state === "review") return "bg-amber-100 text-amber-700 border-amber-200";
+  if (state === "attempted")
+    return "bg-emerald-100 text-emerald-700 border-emerald-200";
+  if (state === "review")
+    return "bg-amber-100 text-amber-700 border-amber-200";
+
   return "bg-white text-slate-700 border-slate-200";
 }
 
@@ -97,7 +100,9 @@ async function apiPost<T>(path: string, body: unknown): Promise<ApiResponse<T>> 
     cache: "no-store",
   });
 
-  const json = (await response.json().catch(() => null)) as ApiResponse<T> | null;
+  const json = (await response.json().catch(() => null)) as
+    | ApiResponse<T>
+    | null;
 
   return {
     success: Boolean(json?.success),
@@ -116,7 +121,9 @@ async function apiGet<T>(path: string): Promise<ApiResponse<T>> {
     cache: "no-store",
   });
 
-  const json = (await response.json().catch(() => null)) as ApiResponse<T> | null;
+  const json = (await response.json().catch(() => null)) as
+    | ApiResponse<T>
+    | null;
 
   return {
     success: Boolean(json?.success),
@@ -139,7 +146,16 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
 
   const autoSubmitTriggeredRef = useRef(false);
 
-  const currentQuestion = attemptData?.questions[currentIndex] ?? null;
+  /**
+   * Important:
+   * Use safe optional chaining on the questions array itself.
+   *
+   * Why:
+   * attemptData may exist briefly before a malformed payload is rejected,
+   * and questions may be missing if backend shape is wrong.
+   * This avoids the "reading '0'" runtime crash.
+   */
+  const currentQuestion = attemptData?.questions?.[currentIndex] ?? null;
 
   async function loadAttemptView(attemptId: string) {
     const viewResponse = await apiGet<AttemptViewResponse>(
@@ -148,6 +164,18 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
 
     if (!viewResponse.success || !viewResponse.data) {
       throw new Error(viewResponse.message || "Failed to load attempt.");
+    }
+
+    /**
+     * Defensive payload validation.
+     * This gives a clearer controlled error instead of crashing later.
+     */
+    if (!Array.isArray(viewResponse.data.questions)) {
+      throw new Error("Attempt view payload is missing questions.");
+    }
+
+    if (!Array.isArray(viewResponse.data.sections)) {
+      throw new Error("Attempt view payload is missing sections.");
     }
 
     setAttemptData(viewResponse.data);
@@ -164,6 +192,7 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
     );
 
     setSecondsLeft(initialSecondsLeft);
+    setCurrentIndex(0);
   }
 
   useEffect(() => {
@@ -201,7 +230,7 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
       }
     }
 
-    bootstrap();
+    void bootstrap();
 
     return () => {
       cancelled = true;
@@ -234,12 +263,16 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
   }, [secondsLeft]);
 
   const answeredCount = useMemo(() => {
-    return attemptData?.questions.filter((item) => Boolean(item.selectedAnswer))
-      .length ?? 0;
+    return (
+      attemptData?.questions?.filter((item) => Boolean(item.selectedAnswer))
+        .length ?? 0
+    );
   }, [attemptData]);
 
   const reviewCount = useMemo(() => {
-    return attemptData?.questions.filter((item) => item.markedForReview).length ?? 0;
+    return (
+      attemptData?.questions?.filter((item) => item.markedForReview).length ?? 0
+    );
   }, [attemptData]);
 
   function formatTimer(totalSeconds: number | null) {
@@ -257,7 +290,7 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
   }
 
   function getPaletteState(index: number) {
-    if (!attemptData) {
+    if (!attemptData || !attemptData.questions[index]) {
       return "default" as const;
     }
 
@@ -289,11 +322,14 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
     setBusyQuestionId(currentQuestion.testQuestionId);
 
     try {
-      const response = await apiPost<SaveAnswerResponse>("/api/attempts/save-answer", {
-        attemptId: attemptData.attempt.id,
-        testQuestionId: currentQuestion.testQuestionId,
-        ...params,
-      });
+      const response = await apiPost<SaveAnswerResponse>(
+        "/api/attempts/save-answer",
+        {
+          attemptId: attemptData.attempt.id,
+          testQuestionId: currentQuestion.testQuestionId,
+          ...params,
+        }
+      );
 
       if (!response.success) {
         throw new Error(response.message || "Failed to save answer.");
@@ -310,7 +346,10 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
             item.testQuestionId === currentQuestion.testQuestionId
               ? {
                   ...item,
-                  ...(Object.prototype.hasOwnProperty.call(params, "selectedAnswer")
+                  ...(Object.prototype.hasOwnProperty.call(
+                    params,
+                    "selectedAnswer"
+                  )
                     ? {
                         selectedAnswer: params.selectedAnswer ?? null,
                         isAnswered: Boolean(params.selectedAnswer),
@@ -374,21 +413,19 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
 
   if (loading) {
     return (
-      <div className="space-y-4">
-        <div className="rounded-3xl border bg-white p-6 shadow-sm">
-          <h1 className="text-xl font-semibold text-slate-900">Loading test…</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Starting or resuming your real attempt from the backend.
-          </p>
-        </div>
+      <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+        <h1 className="text-2xl font-semibold text-slate-900">Loading test…</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Starting or resuming your real attempt from the backend.
+        </p>
       </div>
     );
   }
 
   if (bootError || !attemptData || !currentQuestion) {
     return (
-      <div className="rounded-3xl border border-rose-200 bg-rose-50 p-6 text-rose-700">
-        <h1 className="text-lg font-semibold">Unable to open attempt</h1>
+      <div className="rounded-3xl border border-rose-200 bg-rose-50 p-8 text-rose-700">
+        <h1 className="text-2xl font-semibold">Unable to open attempt</h1>
         <p className="mt-2 text-sm">
           {bootError || "Attempt data could not be loaded."}
         </p>
@@ -404,14 +441,14 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
   ].filter((item) => item.value && item.value.trim());
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-3xl border bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-5">
           <div>
             <p className="text-sm font-medium uppercase tracking-wide text-slate-500">
               Live Attempt
             </p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900">
+            <h1 className="mt-1 text-2xl font-semibold text-slate-900">
               {attemptData.attempt.title}
             </h1>
             <p className="mt-2 text-sm text-slate-600">
@@ -422,47 +459,50 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
             </p>
           </div>
 
-          <div className="rounded-2xl border bg-slate-50 px-4 py-3 text-right">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
+            <p className="text-xs uppercase tracking-wide text-slate-500">
               Time Left
-            </div>
-            <div className="mt-1 text-2xl font-bold text-slate-900">
+            </p>
+            <p className="mt-1 text-xl font-semibold text-slate-900">
               {formatTimer(secondsLeft)}
-            </div>
+            </p>
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
-          <div className="rounded-2xl border bg-slate-50 p-4">
-            <div className="text-xs text-slate-500">Answered</div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">
+        <div className="mt-6 grid gap-4 sm:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs uppercase tracking-wide text-slate-500">
+              Answered
+            </p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">
               {answeredCount}
-            </div>
+            </p>
           </div>
 
-          <div className="rounded-2xl border bg-slate-50 p-4">
-            <div className="text-xs text-slate-500">Marked for Review</div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs uppercase tracking-wide text-slate-500">
+              Marked for Review
+            </p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">
               {reviewCount}
-            </div>
+            </p>
           </div>
 
-          <div className="rounded-2xl border bg-slate-50 p-4">
-            <div className="text-xs text-slate-500">Total Marks</div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs uppercase tracking-wide text-slate-500">
+              Total Marks
+            </p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">
               {attemptData.attempt.totalMarks}
-            </div>
+            </p>
           </div>
         </div>
-      </section>
 
-      <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <section className="rounded-3xl border bg-white p-6 shadow-sm">
-          <div className="mb-4 text-sm font-medium text-slate-500">
+        <div className="mt-8">
+          <p className="text-sm font-medium uppercase tracking-wide text-slate-500">
             Q{currentQuestion.questionNumber}
-          </div>
-
-          <h2 className="text-lg font-semibold leading-7 text-slate-900">
+          </p>
+          <h2 className="mt-2 text-xl font-semibold text-slate-900">
             {currentQuestion.questionText}
           </h2>
 
@@ -473,9 +513,9 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
               return (
                 <label
                   key={option.key}
-                  className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition ${
+                  className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition ${
                     isSelected
-                      ? "border-slate-900 bg-slate-50"
+                      ? "border-blue-500 bg-blue-50"
                       : "border-slate-200 hover:bg-slate-50"
                   }`}
                 >
@@ -483,9 +523,7 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
                     type="radio"
                     name={`question-${currentQuestion.testQuestionId}`}
                     checked={isSelected}
-                    disabled={
-                      busyQuestionId === currentQuestion.testQuestionId || submitting
-                    }
+                    disabled={busyQuestionId === currentQuestion.testQuestionId}
                     onChange={() =>
                       void updateAnswer({
                         selectedAnswer: option.key,
@@ -496,23 +534,23 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
                   />
 
                   <div>
-                    <div className="text-sm font-semibold text-slate-900">
+                    <span className="text-sm font-semibold text-slate-700">
                       {option.key}
-                    </div>
-                    <div className="mt-1 text-sm leading-6 text-slate-700">
-                      {option.value}
-                    </div>
+                    </span>
+                    <p className="mt-1 text-sm text-slate-700">{option.value}</p>
                   </div>
                 </label>
               );
             })}
           </div>
 
-          <div className="mt-6 flex flex-wrap gap-3">
+          <div className="mt-8 flex flex-wrap gap-3">
             <button
               type="button"
               disabled={currentIndex === 0}
-              onClick={() => setCurrentIndex((previous) => Math.max(previous - 1, 0))}
+              onClick={() =>
+                setCurrentIndex((previous) => Math.max(previous - 1, 0))
+              }
               className="rounded-xl border px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
             >
               Previous
@@ -520,9 +558,6 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
 
             <button
               type="button"
-              disabled={
-                busyQuestionId === currentQuestion.testQuestionId || submitting
-              }
               onClick={() =>
                 void updateAnswer({
                   markedForReview: !currentQuestion.markedForReview,
@@ -542,9 +577,7 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
 
             <button
               type="button"
-              disabled={
-                currentIndex >= attemptData.questions.length - 1
-              }
+              disabled={currentIndex === attemptData.questions.length - 1}
               onClick={() =>
                 setCurrentIndex((previous) =>
                   Math.min(previous + 1, attemptData.questions.length - 1)
@@ -565,19 +598,23 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
             </button>
           </div>
 
-          <p className="mt-3 text-xs text-slate-500">
+          <p className="mt-4 text-xs text-slate-500">
             Selecting an option saves that answer immediately. Moving Next or
             Previous does not auto-save by itself.
           </p>
-        </section>
+        </div>
+      </section>
 
-        <aside className="rounded-3xl border bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">Question Palette</h3>
-          <p className="mt-2 text-sm text-slate-600">
+      <aside className="space-y-6">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">
+            Question Palette
+          </h3>
+          <p className="mt-1 text-xs text-slate-500">
             Blue = Current, Green = Answered, Yellow = Review.
           </p>
 
-          <div className="mt-5 grid grid-cols-5 gap-3">
+          <div className="mt-4 grid grid-cols-5 gap-2">
             {attemptData.questions.map((item, index) => (
               <button
                 key={item.testQuestionId}
@@ -591,32 +628,31 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
               </button>
             ))}
           </div>
+        </section>
 
-          {attemptData.sections.length > 0 ? (
-            <div className="mt-6">
-              <h4 className="text-sm font-semibold text-slate-900">Sections</h4>
-              <div className="mt-3 space-y-2">
-                {attemptData.sections.map((section) => (
-                  <div
-                    key={section.id}
-                    className="rounded-2xl border bg-slate-50 p-3"
-                  >
-                    <div className="text-sm font-medium text-slate-900">
-                      {section.title}
-                    </div>
-                    <div className="mt-1 text-xs text-slate-600">
-                      {section.totalQuestions} questions
-                      {section.durationInMinutes
-                        ? ` • ${section.durationInMinutes} min`
-                        : ""}
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {attemptData.sections.length > 0 ? (
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-slate-900">Sections</h3>
+
+            <div className="mt-4 space-y-3">
+              {attemptData.sections.map((section) => (
+                <div
+                  key={section.id}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                >
+                  <p className="font-medium text-slate-900">{section.title}</p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    {section.totalQuestions} questions
+                    {section.durationInMinutes
+                      ? ` • ${section.durationInMinutes} min`
+                      : ""}
+                  </p>
+                </div>
+              ))}
             </div>
-          ) : null}
-        </aside>
-      </div>
+          </section>
+        ) : null}
+      </aside>
     </div>
   );
 }
