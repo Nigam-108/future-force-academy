@@ -140,6 +140,7 @@ model Test {
   sections      TestSection[]
   testQuestions TestQuestion[]
   attempts      TestAttempt[]
+  testBatches   TestBatch[]
 }
 
 model TestSection {
@@ -256,6 +257,8 @@ model Batch {
   createdById String?
   createdBy   User?   @relation("BatchCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
+  testBatches TestBatch[]
+
   /// Junction relation to students.
   studentBatches StudentBatch[]
 }
@@ -276,4 +279,18 @@ model StudentBatch {
   batch   Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
 
   @@unique([studentId, batchId])
+}
+
+model TestBatch {
+  id         String   @id @default(cuid())
+  testId     String
+  batchId    String
+  assignedAt DateTime @default(now())
+
+  test  Test  @relation(fields: [testId], references: [id], onDelete: Cascade)
+  batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([testId, batchId])
+  @@index([testId])
+  @@index([batchId])
 }

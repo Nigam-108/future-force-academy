@@ -20,7 +20,11 @@ function getStatusCode(error: unknown) {
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth();
+    const session = await requireAuth();
+
+    if (session.role !== "STUDENT") {
+      return fail("Only students can view tests", 403);
+    }
 
     const query = Object.fromEntries(request.nextUrl.searchParams.entries());
     const parsed = listStudentTestsQuerySchema.safeParse(query);
@@ -29,7 +33,7 @@ export async function GET(request: NextRequest) {
       return fail("Invalid query parameters", 422, parsed.error.flatten());
     }
 
-    const result = await listStudentTests(parsed.data);
+   const result = await listStudentTests(parsed.data, session.userId);
 
     return ok("Student tests fetched successfully", result);
   } catch (error) {

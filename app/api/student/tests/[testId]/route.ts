@@ -1,0 +1,98 @@
+import { NextRequest } from "next/server";
+import { requireAuth } from "@/server/auth/guards";
+import { ok, fail } from "@/server/utils/api-response";
+import { AppError } from "@/server/utils/errors";
+import { prisma } from "@/server/db/prisma";
+import { TestMode, TestVisibilityStatus } from "@prisma/client";
+
+function deriveStudentTestStatus(test: {
+  mode: TestMode;
+  startAt: Date | null;
+  endAt: Date | null;
+}) {
+  const now = new Date();
+
+  if (test.mode === TestMode.PRACTICE) return "AVAILABLE";
+
+  if (test.mode === TestMode.LIVE) {
+    if (test.startAt && now < test.startAt) return "UPCOMING";
+    if (test.endAt && now > test.endAt) return "COMPLETED";
+    return "LIVE";
+  }
+
+  if (test.mode === TestMode.ASSIGNED) {
+    if (test.startAt && now < test.startAt) return "UPCOMING";
+    if (test.endAt && now > test.endAt) return "COMPLETED";
+    return "AVAILABLE";
+  }
+
+  return "AVAILABLE";
+}
+
+type RouteContext = {
+  params: Promise<{ testId: string }>;
+};
+
+export async function GET(_request: NextRequest, context: RouteContext) {
+  try {
+    const session = await requireAuth();
+
+    if (session.role !== "STUDENT") {
+      return fail("Only students can view tests", 403);
+    }
+
+    const { testId } = await context.params;
+
+    const test = await prisma.test.findUnique({
+      where: { id: testId },
+      include: {
+        sections: { orderBy: { displayOrder: "asc" } },
+        _count: { select: { testQuestions: true } },
+        testBatches: {
+          select: {
+            batch: {
+              select: {
+                id: true,
+                studentBatches: {
+                  where: { studentId: session.userId },
+                  select: { id: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!test) {
+      throw new AppError("Test not found", 404);
+    }
+
+    if (test.visibilityStatus !== TestVisibilityStatus.LIVE) {
+      throw new AppError("Test is not available", 403);
+    }
+
+    // Batch-access check
+    if (test.testBatches.length > 0) {
+      const hasAccess = test.testBatches.some(
+        (tb) => tb.batch.studentBatches.length > 0
+      );
+
+      if (!hasAccess) {
+        throw new AppError("You do not have access to this test", 403);
+      }
+    }
+
+    const studentStatus = deriveStudentTestStatus(test);
+
+    // Strip internal batch membership data from response
+    const { testBatches: _testBatches, ...testData } = test;
+
+    return ok("Test fetched successfully", { ...testData, studentStatus }, 200);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to fetch test";
+    const status = error instanceof AppError ? error.statusCode : 400;
+    return fail(message, status);
+  }
+}

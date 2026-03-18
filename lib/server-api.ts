@@ -1,5 +1,7 @@
 import { cookies, headers } from "next/headers";
 
+// ─── Core fetch helper ──────────────────────────────────────────────────────
+
 type InternalApiSuccess<T> = {
   success: true;
   status: number;
@@ -18,14 +20,6 @@ type InternalApiFailure = {
 
 export type InternalApiResult<T> = InternalApiSuccess<T> | InternalApiFailure;
 
-/**
- * Safer internal API fetch helper for server components.
- *
- * Goals:
- * - forward cookies to protected internal routes
- * - never throw raw fetch/json errors into pages
- * - always return a normalized result shape
- */
 export async function fetchInternalApi<T>(
   path: string
 ): Promise<InternalApiResult<T>> {
@@ -37,10 +31,6 @@ export async function fetchInternalApi<T>(
     const protocol =
       process.env.NODE_ENV === "development" ? "http" : "https";
 
-    /**
-     * Fallback:
-     * Some environments may not provide host as expected.
-     */
     if (!host) {
       return {
         success: false,
@@ -99,4 +89,78 @@ export async function fetchInternalApi<T>(
       data: null,
     };
   }
+}
+
+// ─── Student test types ─────────────────────────────────────────────────────
+
+export type StudentTestMode = "PRACTICE" | "LIVE" | "ASSIGNED";
+export type StudentTestStatus = "AVAILABLE" | "UPCOMING" | "LIVE" | "COMPLETED";
+
+export type StudentTestItem = {
+  id: string;
+  title: string;
+  slug: string;
+  description: string | null;
+  mode: StudentTestMode;
+  structureType: "SINGLE" | "SECTIONAL";
+  visibilityStatus: string;
+  totalQuestions: number;
+  totalMarks: number;
+  durationInMinutes: number | null;
+  startAt: string | null;
+  endAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  sections: Array<{
+    id: string;
+    title: string;
+    displayOrder: number;
+    totalQuestions: number;
+    durationInMinutes: number | null;
+    positiveMarks: number | null;
+    negativeMarks: number | null;
+  }>;
+  _count?: {
+    testQuestions: number;
+  };
+  studentStatus: StudentTestStatus;
+};
+
+export type StudentTestDetailItem = StudentTestItem;
+
+type StudentTestsResponse = {
+  items: StudentTestItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  filteredCount: number;
+};
+
+// ─── Student test helpers ───────────────────────────────────────────────────
+
+export async function getStudentTests(params: {
+  page?: string;
+  limit?: string;
+  search?: string;
+  mode?: StudentTestMode | "";
+  studentStatus?: StudentTestStatus | "";
+}): Promise<InternalApiResult<StudentTestsResponse>> {
+  const searchParams = new URLSearchParams();
+
+  if (params.page) searchParams.set("page", params.page);
+  if (params.limit) searchParams.set("limit", params.limit);
+  if (params.search) searchParams.set("search", params.search);
+  if (params.mode) searchParams.set("mode", params.mode);
+  if (params.studentStatus) searchParams.set("studentStatus", params.studentStatus);
+
+  return fetchInternalApi<StudentTestsResponse>(
+    `/api/student/tests?${searchParams.toString()}`
+  );
+}
+
+export async function getStudentTestById(
+  testId: string
+): Promise<InternalApiResult<StudentTestDetailItem>> {
+  return fetchInternalApi<StudentTestDetailItem>(`/api/student/tests/${testId}`);
 }

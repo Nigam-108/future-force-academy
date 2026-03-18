@@ -193,14 +193,17 @@ function deriveStudentTestStatus(test: {
   return "AVAILABLE";
 }
 
-export async function listStudentTests(input: ListStudentTestsQueryInput) {
+export async function listStudentTests(
+  input: ListStudentTestsQueryInput,
+  userId: string
+) {
   const result = await listStudentVisibleTestRecords({
     page: input.page,
     limit: input.limit,
     search: input.search,
     mode: input.mode,
+    userId,
   });
-
   const mappedItems = result.items.map((test) => ({
     ...test,
     studentStatus: deriveStudentTestStatus(test),

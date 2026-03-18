@@ -56,6 +56,17 @@ type AdminTestsResponse = {
   page: number;
   limit: number;
   totalPages: number;
+  testBatches: Array<{
+  id: string;
+  batch: {
+    id: string;
+    title: string;
+    slug: string;
+    examType: string;
+    status: string;
+    isPaid: boolean;
+  };
+}>;
 };
 
 function getSingleValue(value: string | string[] | undefined) {
@@ -184,6 +195,13 @@ function TestCard({ test }: { test: AdminTestsResponse["items"][number] }) {
           </Link>
 
           <Link
+  href={`/admin/tests/${test.id}/batches`}
+  className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+>
+  Assign Batches
+</Link>
+
+          <Link
             href={`/admin/tests/${test.id}/edit`}
             className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
@@ -199,6 +217,32 @@ function TestCard({ test }: { test: AdminTestsResponse["items"][number] }) {
       <p className="mt-4 text-sm text-slate-600">
         {truncateText(test.description)}
       </p>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+  {test.testBatches.length === 0 ? (
+    <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+      Global
+    </span>
+  ) : (
+    <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
+      {test.testBatches.length} batch{test.testBatches.length !== 1 ? "es" : ""}
+    </span>
+  )}
+  {test.testBatches.slice(0, 3).map((tb) => (
+    <span
+      key={tb.id}
+      className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600"
+    >
+      {tb.batch.title}
+    </span>
+  ))}
+  {test.testBatches.length > 3 ? (
+    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">
+      +{test.testBatches.length - 3} more
+    </span>
+  ) : null}
+</div>
+      
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <div className="rounded-2xl bg-slate-50 p-4">
@@ -253,6 +297,8 @@ function TestCard({ test }: { test: AdminTestsResponse["items"][number] }) {
           <p className="mt-1 text-sm font-medium text-slate-900">
             {formatDateTime(test.startAt)}
           </p>
+
+          
         </div>
       </div>
     </div>

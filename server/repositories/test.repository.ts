@@ -6,6 +6,9 @@ import {
 } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 
+/**
+ * Admin-facing include — includes testBatches for assignment display.
+ */
 const testInclude = {
   createdBy: {
     select: {
@@ -16,7 +19,7 @@ const testInclude = {
   },
   sections: {
     orderBy: {
-      displayOrder: "asc",
+      displayOrder: "asc" as const,
     },
   },
   _count: {
@@ -25,11 +28,43 @@ const testInclude = {
       attempts: true,
     },
   },
+  testBatches: {
+    select: {
+      id: true,
+      batch: {
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          examType: true,
+          status: true,
+          isPaid: true,
+        },
+      },
+    },
+    orderBy: {
+      assignedAt: "asc" as const,
+    },
+  },
 } satisfies Prisma.TestInclude;
 
 /**
- * Finds a test by slug.
+ * Student-facing include — excludes testBatches from response.
+ * Batch filtering is done in the WHERE clause, not exposed to students.
  */
+const studentTestInclude = {
+  sections: {
+    orderBy: {
+      displayOrder: "asc" as const,
+    },
+  },
+  _count: {
+    select: {
+      testQuestions: true,
+    },
+  },
+} satisfies Prisma.TestInclude;
+
 export async function findTestBySlug(slug: string) {
   return prisma.test.findUnique({
     where: { slug },
@@ -37,9 +72,6 @@ export async function findTestBySlug(slug: string) {
   });
 }
 
-/**
- * Finds a test by id.
- */
 export async function findTestById(id: string) {
   return prisma.test.findUnique({
     where: { id },
@@ -47,9 +79,6 @@ export async function findTestById(id: string) {
   });
 }
 
-/**
- * Creates a new test.
- */
 export async function createTestRecord(data: {
   createdById: string;
   title: string;
@@ -70,9 +99,6 @@ export async function createTestRecord(data: {
   });
 }
 
-/**
- * Updates an existing test.
- */
 export async function updateTestRecord(
   id: string,
   data: {
@@ -96,9 +122,6 @@ export async function updateTestRecord(
   });
 }
 
-/**
- * Lists admin-visible tests with pagination and filters.
- */
 export async function listTestRecords(filters: {
   page: number;
   limit: number;
@@ -111,31 +134,14 @@ export async function listTestRecords(filters: {
     ...(filters.search
       ? {
           OR: [
-            {
-              title: {
-                contains: filters.search,
-                mode: "insensitive",
-              },
-            },
-            {
-              slug: {
-                contains: filters.search,
-                mode: "insensitive",
-              },
-            },
-            {
-              description: {
-                contains: filters.search,
-                mode: "insensitive",
-              },
-            },
+            { title: { contains: filters.search, mode: "insensitive" } },
+            { slug: { contains: filters.search, mode: "insensitive" } },
+            { description: { contains: filters.search, mode: "insensitive" } },
           ],
         }
       : {}),
     ...(filters.mode ? { mode: filters.mode } : {}),
-    ...(filters.structureType
-      ? { structureType: filters.structureType }
-      : {}),
+    ...(filters.structureType ? { structureType: filters.structureType } : {}),
     ...(filters.visibilityStatus
       ? { visibilityStatus: filters.visibilityStatus }
       : {}),
@@ -164,41 +170,70 @@ export async function listTestRecords(filters: {
 }
 
 /**
- * Lists student-visible tests.
+ * Batch-aware student test listing.
+ *
+ * Visibility rule:
+ * - No TestBatch rows for the test = global test, all students see it
+ * - TestBatch rows exist = only students in those batches see it
  */
 export async function listStudentVisibleTestRecords(filters: {
   page: number;
   limit: number;
   search?: string;
   mode?: TestMode;
+  userId: string;
 }) {
+  const batchAccessFilter: Prisma.TestWhereInput = {
+    OR: [
+      // Global test: no batch restrictions
+      { testBatches: { none: {} } },
+      // Batch-restricted test: student is in at least one linked batch
+      {
+        testBatches: {
+          some: {
+            batch: {
+              studentBatches: {
+                some: { studentId: filters.userId },
+              },
+            },
+          },
+        },
+      },
+    ],
+  };
+
   const where: Prisma.TestWhereInput = {
-    visibilityStatus: TestVisibilityStatus.LIVE,
-    ...(filters.search
-      ? {
-          OR: [
+    AND: [
+      { visibilityStatus: TestVisibilityStatus.LIVE },
+      batchAccessFilter,
+      ...(filters.search
+        ? [
             {
-              title: {
-                contains: filters.search,
-                mode: "insensitive",
-              },
+              OR: [
+                {
+                  title: {
+                    contains: filters.search,
+                    mode: "insensitive" as const,
+                  },
+                },
+                {
+                  slug: {
+                    contains: filters.search,
+                    mode: "insensitive" as const,
+                  },
+                },
+                {
+                  description: {
+                    contains: filters.search,
+                    mode: "insensitive" as const,
+                  },
+                },
+              ],
             },
-            {
-              slug: {
-                contains: filters.search,
-                mode: "insensitive",
-              },
-            },
-            {
-              description: {
-                contains: filters.search,
-                mode: "insensitive",
-              },
-            },
-          ],
-        }
-      : {}),
-    ...(filters.mode ? { mode: filters.mode } : {}),
+          ]
+        : []),
+      ...(filters.mode ? [{ mode: filters.mode }] : []),
+    ],
   };
 
   const skip = (filters.page - 1) * filters.limit;
@@ -209,7 +244,7 @@ export async function listStudentVisibleTestRecords(filters: {
       skip,
       take: filters.limit,
       orderBy: { createdAt: "desc" },
-      include: testInclude,
+      include: studentTestInclude,
     }),
     prisma.test.count({ where }),
   ]);
@@ -223,9 +258,6 @@ export async function listStudentVisibleTestRecords(filters: {
   };
 }
 
-/**
- * Returns the delete-impact information for a test.
- */
 export async function findTestDeleteImpact(id: string) {
   return prisma.test.findUnique({
     where: { id },
@@ -244,59 +276,94 @@ export async function findTestDeleteImpact(id: string) {
   });
 }
 
-/**
- * Deletes a test.
- */
 export async function deleteTestRecord(id: string) {
   return prisma.test.delete({
+    where: { id },
+    select: { id: true, title: true, slug: true },
+  });
+}
+
+// ─── Blueprint type defined FIRST so duplicateTestRecord can reference it ───
+
+type TestBlueprint = {
+  id: string;
+  title: string;
+  slug: string;
+  description: string | null;
+  mode: TestMode;
+  structureType: TestStructureType;
+  visibilityStatus: TestVisibilityStatus;
+  totalQuestions: number;
+  totalMarks: number;
+  durationInMinutes: number | null;
+  startAt: Date | null;
+  endAt: Date | null;
+  sections: Array<{
+    id: string;
+    title: string;
+    displayOrder: number;
+    totalQuestions: number;
+    durationInMinutes: number | null;
+    positiveMarks: number | null;
+    negativeMarks: number | null;
+  }>;
+  testQuestions: Array<{
+    id: string;
+    questionId: string;
+    sectionId: string | null;
+    displayOrder: number;
+    positiveMarks: number | null;
+    negativeMarks: number | null;
+  }>;
+};
+
+export async function findTestBlueprintForDuplication(
+  id: string
+): Promise<TestBlueprint | null> {
+  return prisma.test.findUnique({
     where: { id },
     select: {
       id: true,
       title: true,
       slug: true,
-    },
-  });
-}
-
-/**
- * Fetches a full test blueprint for duplication.
- *
- * Includes:
- * - sections in proper order
- * - assigned questions in proper order
- *
- * Why:
- * duplicating a test should preserve its structure and assignment setup.
- */
-export async function findTestBlueprintForDuplication(id: string) {
-  return prisma.test.findUnique({
-    where: { id },
-    include: {
+      description: true,
+      mode: true,
+      structureType: true,
+      visibilityStatus: true,
+      totalQuestions: true,
+      totalMarks: true,
+      durationInMinutes: true,
+      startAt: true,
+      endAt: true,
       sections: {
-        orderBy: {
-          displayOrder: "asc",
+        orderBy: { displayOrder: "asc" },
+        select: {
+          id: true,
+          title: true,
+          displayOrder: true,
+          totalQuestions: true,
+          durationInMinutes: true,
+          positiveMarks: true,
+          negativeMarks: true,
         },
       },
       testQuestions: {
-        orderBy: {
-          displayOrder: "asc",
+        orderBy: { displayOrder: "asc" },
+        select: {
+          id: true,
+          questionId: true,
+          sectionId: true,
+          displayOrder: true,
+          positiveMarks: true,
+          negativeMarks: true,
         },
       },
     },
   });
 }
 
-/**
- * Creates a duplicated test with copied sections and assigned rows.
- *
- * Important duplication rules:
- * - new test is always created as DRAFT
- * - attempts/results are NOT copied
- * - sections are recreated first
- * - testQuestions are recreated after section-id remapping
- */
 export async function duplicateTestRecord(params: {
-  sourceTest: NonNullable<Awaited<ReturnType<typeof findTestBlueprintForDuplication>>>;
+  sourceTest: TestBlueprint;
   newTitle: string;
   newSlug: string;
   createdById: string;
@@ -321,9 +388,6 @@ export async function duplicateTestRecord(params: {
       },
     });
 
-    /**
-     * Recreate sections and map old sectionId -> new sectionId.
-     */
     const sectionIdMap = new Map<string, string>();
 
     for (const section of source.sections) {
@@ -342,15 +406,14 @@ export async function duplicateTestRecord(params: {
       sectionIdMap.set(section.id, createdSection.id);
     }
 
-    /**
-     * Recreate assigned test-question rows with mapped section ids.
-     */
     if (source.testQuestions.length > 0) {
       await tx.testQuestion.createMany({
         data: source.testQuestions.map((item) => ({
           testId: createdTest.id,
           questionId: item.questionId,
-          sectionId: item.sectionId ? sectionIdMap.get(item.sectionId) ?? null : null,
+          sectionId: item.sectionId
+            ? sectionIdMap.get(item.sectionId) ?? null
+            : null,
           displayOrder: item.displayOrder,
           positiveMarks: item.positiveMarks,
           negativeMarks: item.negativeMarks,
