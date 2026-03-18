@@ -81,14 +81,24 @@ export async function startAttempt(input: StartAttemptInput, userId: string) {
   }
 
   assertTestAvailableForStudentStart(test);
- const hasBatchAccess = await checkStudentBatchAccessToTest(test.id, userId);
 
-  if (!hasBatchAccess) {
-    throw new AppError(
-      "You do not have access to this test. Please enroll in the required batch first.",
-      403
+  // ── Batch access guard ──────────────────────────────────────────────────
+  // If this test is linked to one or more batches, the student must be
+  // a member of at least one of those batches to start the attempt.
+  if (test.testBatches.length > 0) {
+    const hasAccess = test.testBatches.some((tb) =>
+      tb.batch.studentBatches.some((sb) => sb.studentId === userId)
     );
+
+    if (!hasAccess) {
+      throw new AppError(
+        "You do not have access to this test. Please contact the admin.",
+        403
+      );
+    }
   }
+  // ── End batch access guard ──────────────────────────────────────────────
+
   if (test.testQuestions.length === 0) {
     throw new AppError("This test has no assigned questions yet", 400);
   }

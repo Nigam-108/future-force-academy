@@ -12,6 +12,10 @@ import { prisma } from "@/server/db/prisma";
  * The start-attempt flow needs the assigned testQuestion IDs
  * to create placeholder attempt-answer rows.
  */
+/**
+ * Fetches a test before starting an attempt.
+ * Now includes testBatches so the service can enforce batch access.
+ */
 export async function findTestForAttemptStart(testId: string) {
   return prisma.test.findUnique({
     where: { id: testId },
@@ -29,6 +33,20 @@ export async function findTestForAttemptStart(testId: string) {
       },
       sections: {
         orderBy: { displayOrder: "asc" },
+      },
+      testBatches: {
+        select: {
+          batch: {
+            select: {
+              id: true,
+              studentBatches: {
+                select: {
+                  studentId: true,
+                },
+              },
+            },
+          },
+        },
       },
     },
   });
