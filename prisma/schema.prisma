@@ -257,10 +257,10 @@ model Batch {
   createdById String?
   createdBy   User?   @relation("BatchCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
-  testBatches TestBatch[]
 
   /// Junction relation to students.
   studentBatches StudentBatch[]
+  testBatches TestBatch[]
 }
 
 /// Junction table between student users and batches.

@@ -54,16 +54,15 @@ const testInclude = {
  */
 const studentTestInclude = {
   sections: {
-    orderBy: {
-      displayOrder: "asc" as const,
-    },
+    orderBy: { displayOrder: "asc" as const },
   },
   _count: {
     select: {
       testQuestions: true,
+      testBatches: true,
     },
   },
-} satisfies Prisma.TestInclude;
+};
 
 export async function findTestBySlug(slug: string) {
   return prisma.test.findUnique({

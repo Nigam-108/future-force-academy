@@ -357,3 +357,43 @@ export async function findSubmittedAttemptResultForUser(
     },
   });
 }
+
+/**
+ * Checks whether a student has batch access to a specific test.
+ *
+ * Rules:
+ * - No TestBatch rows = global test, all students have access
+ * - TestBatch rows exist = student must be in at least one linked batch
+ *
+ * Used by: startAttempt service to guard attempt creation.
+ */
+export async function checkStudentBatchAccessToTest(
+  testId: string,
+  userId: string
+): Promise<boolean> {
+  const test = await prisma.test.findUnique({
+    where: { id: testId },
+    select: {
+      testBatches: {
+        select: {
+          batch: {
+            select: {
+              studentBatches: {
+                where: { studentId: userId },
+                select: { id: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!test) return false;
+
+  // Global test — no batch restrictions
+  if (test.testBatches.length === 0) return true;
+
+  // Batch-restricted — student must be in at least one linked batch
+  return test.testBatches.some((tb) => tb.batch.studentBatches.length > 0);
+}

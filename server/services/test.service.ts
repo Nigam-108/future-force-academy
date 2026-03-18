@@ -207,6 +207,7 @@ export async function listStudentTests(
   const mappedItems = result.items.map((test) => ({
     ...test,
     studentStatus: deriveStudentTestStatus(test),
+    isGlobal: (test._count as { testQuestions: number; testBatches: number }).testBatches === 0,
   }));
 
   const filteredItems = input.studentStatus

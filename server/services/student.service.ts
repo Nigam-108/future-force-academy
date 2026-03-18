@@ -13,6 +13,10 @@ import {
 } from "@/server/repositories/student.repository";
 import { UpdateStudentProfileInput } from "@/server/validations/student-profile.schema";
 
+import {
+  findStudentBatchAssignments,
+} from "@/server/repositories/batch.repository";
+
 export async function getStudentDashboard(userId: string) {
   const student = await findStudentUserById(userId);
 
@@ -20,11 +24,15 @@ export async function getStudentDashboard(userId: string) {
     throw new AppError("Student not found", 404);
   }
 
-  const stats = await getStudentDashboardStats(userId);
+  const [stats, batchMemberships] = await Promise.all([
+    getStudentDashboardStats(userId),
+    findStudentBatchAssignments(userId),
+  ]);
 
   return {
     student,
     stats,
+    batchMemberships,
   };
 }
 

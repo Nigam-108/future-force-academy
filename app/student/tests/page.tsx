@@ -116,6 +116,16 @@ function TestListCard({ test }: { test: StudentTestItem }) {
             <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700 ring-1 ring-slate-200">
               {test.structureType}
             </span>
+
+            {test.isGlobal ? (
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 ring-1 ring-emerald-200">
+                Open
+              </span>
+            ) : (
+              <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700 ring-1 ring-amber-200">
+                Batch Access
+              </span>
+            )}
           </div>
 
           <h2 className="text-lg font-semibold text-slate-900">{test.title}</h2>

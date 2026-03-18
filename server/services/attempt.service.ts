@@ -1,6 +1,8 @@
 import { AttemptStatus, TestMode, TestVisibilityStatus } from "@prisma/client";
 import { AppError } from "@/server/utils/errors";
+// REPLACE the existing import block
 import {
+  checkStudentBatchAccessToTest,
   createAttemptWithAnswerPlaceholders,
   finalizeAttemptWithResult,
   findAttemptByIdForUser,
@@ -79,7 +81,14 @@ export async function startAttempt(input: StartAttemptInput, userId: string) {
   }
 
   assertTestAvailableForStudentStart(test);
+ const hasBatchAccess = await checkStudentBatchAccessToTest(test.id, userId);
 
+  if (!hasBatchAccess) {
+    throw new AppError(
+      "You do not have access to this test. Please enroll in the required batch first.",
+      403
+    );
+  }
   if (test.testQuestions.length === 0) {
     throw new AppError("This test has no assigned questions yet", 400);
   }

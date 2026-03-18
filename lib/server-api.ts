@@ -124,6 +124,7 @@ export type StudentTestItem = {
     testQuestions: number;
   };
   studentStatus: StudentTestStatus;
+  isGlobal: boolean;
 };
 
 export type StudentTestDetailItem = StudentTestItem;
