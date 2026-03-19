@@ -94,6 +94,8 @@ model User {
 
   /// Batch memberships for student access grouping.
   studentBatches StudentBatch[] @relation("StudentBatchMembership")
+  payments  Payment[]
+  purchases Purchase[]
 }
 
 model Question {
@@ -261,6 +263,8 @@ model Batch {
   /// Junction relation to students.
   studentBatches StudentBatch[]
   testBatches TestBatch[]
+  payments  Payment[]
+  purchases Purchase[]
 }
 
 /// Junction table between student users and batches.
@@ -293,4 +297,73 @@ model TestBatch {
   @@unique([testId, batchId])
   @@index([testId])
   @@index([batchId])
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum PaymentGateway {
+  RAZORPAY
+  MANUAL
+}
+
+enum PurchaseStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+/// Records a payment transaction attempt.
+///
+/// One payment = one checkout attempt.
+/// Multiple payments for the same user+batch are allowed
+/// (e.g. failed then succeeded).
+/// Only one ACTIVE Purchase per user+batch is enforced separately.
+model Payment {
+  id              String         @id @default(cuid())
+  userId          String
+  batchId         String
+  orderId         String?
+  paymentId       String?
+  amount          Int
+  currency        String         @default("INR")
+  status          PaymentStatus  @default(PENDING)
+  gateway         PaymentGateway @default(MANUAL)
+  gatewayResponse Json?
+  notes           String?
+  paidAt          DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  batch     Batch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  purchases Purchase[]
+}
+
+/// Records confirmed access granted to a student for a batch.
+///
+/// Created automatically when a Payment reaches SUCCESS status,
+/// or manually by admin for free/offline enrollments.
+///
+/// One active Purchase per user+batch enforced by unique constraint.
+model Purchase {
+  id         String         @id @default(cuid())
+  userId     String
+  batchId    String
+  paymentId  String?
+  status     PurchaseStatus @default(ACTIVE)
+  validFrom  DateTime       @default(now())
+  validUntil DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  batch   Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, batchId])
 }
