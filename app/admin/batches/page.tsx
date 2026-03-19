@@ -1,34 +1,43 @@
 import Link from "next/link";
 import { PageShell } from "@/components/shared/page-shell";
 import { fetchInternalApi } from "@/lib/server-api";
+import { BatchStatusActions } from "@/components/admin/batch-status-actions";
 
 export const dynamic = "force-dynamic";
 
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+type BatchStatus = "DRAFT" | "ACTIVE" | "CLOSED";
+
+type BatchListItem = {
+  id: string;
+  title: string;
+  slug: string;
+  description: string | null;
+  examType: string;
+  status: BatchStatus;
+  startDate: string | null;
+  endDate: string | null;
+  isPaid: boolean;
+  createdAt: string;
+  _count: {
+    studentBatches: number;
+  };
+  createdBy: {
+    fullName: string;
+    email: string;
+  } | null;
+};
+
 type BatchListResponse = {
-  items: Array<{
-    id: string;
-    title: string;
-    slug: string;
-    description: string | null;
-    examType: string;
-    status: string;
-    startDate: string | null;
-    endDate: string | null;
-    isPaid: boolean;
-    createdAt: string;
-    _count: {
-      studentBatches: number;
-    };
-    createdBy: {
-      fullName: string;
-      email: string;
-    } | null;
-  }>;
+  items: BatchListItem[];
   total: number;
   page: number;
   limit: number;
   totalPages: number;
 };
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -37,15 +46,13 @@ function formatDate(value: string | null) {
   );
 }
 
-function statusBadgeClass(status: string) {
+function statusBadgeClass(status: BatchStatus) {
   switch (status) {
     case "ACTIVE":
       return "bg-emerald-50 text-emerald-700 ring-emerald-200";
     case "DRAFT":
       return "bg-amber-50 text-amber-700 ring-amber-200";
     case "CLOSED":
-      return "bg-slate-100 text-slate-600 ring-slate-200";
-    default:
       return "bg-slate-100 text-slate-600 ring-slate-200";
   }
 }
@@ -65,19 +72,50 @@ function examTypeBadgeClass(examType: string) {
   }
 }
 
+/**
+ * Lifecycle warning shown inside each batch card.
+ */
+function LifecycleWarning({ batch }: { batch: BatchListItem }) {
+  if (batch.status === "DRAFT") {
+    return (
+      <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+        <span className="font-semibold">DRAFT:</span> Students cannot be
+        enrolled and tests cannot be linked until this batch is activated.
+      </div>
+    );
+  }
+
+  if (batch.status === "CLOSED") {
+    return (
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <span className="font-semibold">CLOSED:</span> No new enrollments or
+        attempt starts allowed. Existing data is preserved. Reopen to ACTIVE if
+        needed.
+      </div>
+    );
+  }
+
+  return null;
+}
+
+// ─── Page ────────────────────────────────────────────────────────────────────
+
 export default async function AdminBatchesPage() {
-  const result = await fetchInternalApi<BatchListResponse>("/api/admin/batches");
+  const result = await fetchInternalApi<BatchListResponse>(
+    "/api/admin/batches"
+  );
   const data = result.data;
 
   return (
     <PageShell
       title="Batches"
-      description="Manage exam-wise batches, assign students, and link tests to control access."
+      description="Manage exam-wise batches, control lifecycle status, assign students, and link tests."
     >
       <div className="space-y-6">
-        {/* Summary stats */}
+
+        {/* ── Summary stats ── */}
         {result.success && data ? (
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-4">
             <div className="rounded-2xl border bg-white p-4 shadow-sm">
               <p className="text-sm text-slate-500">Total Batches</p>
               <p className="mt-1 text-2xl font-semibold text-slate-900">
@@ -85,20 +123,30 @@ export default async function AdminBatchesPage() {
               </p>
             </div>
             <div className="rounded-2xl border bg-white p-4 shadow-sm">
-              <p className="text-sm text-slate-500">Active Batches</p>
-              <p className="mt-1 text-2xl font-semibold text-slate-900">
+              <p className="text-sm text-slate-500">Active</p>
+              <p className="mt-1 text-2xl font-semibold text-emerald-700">
                 {data.items.filter((b) => b.status === "ACTIVE").length}
+              </p>
+            </div>
+            <div className="rounded-2xl border bg-white p-4 shadow-sm">
+              <p className="text-sm text-slate-500">Draft</p>
+              <p className="mt-1 text-2xl font-semibold text-amber-700">
+                {data.items.filter((b) => b.status === "DRAFT").length}
               </p>
             </div>
             <div className="rounded-2xl border bg-white p-4 shadow-sm">
               <p className="text-sm text-slate-500">Total Students Enrolled</p>
               <p className="mt-1 text-2xl font-semibold text-slate-900">
-                {data.items.reduce((sum, b) => sum + b._count.studentBatches, 0)}
+                {data.items.reduce(
+                  (sum, b) => sum + b._count.studentBatches,
+                  0
+                )}
               </p>
             </div>
           </div>
         ) : null}
 
+        {/* ── Create button ── */}
         <div className="flex justify-end">
           <Link
             href="/admin/batches/new"
@@ -108,6 +156,7 @@ export default async function AdminBatchesPage() {
           </Link>
         </div>
 
+        {/* ── Batch list ── */}
         {!result.success || !data ? (
           <div className="rounded-3xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
             {result.message}
@@ -118,8 +167,8 @@ export default async function AdminBatchesPage() {
               No batches found
             </h2>
             <p className="mt-2 text-sm text-slate-600">
-              Create your first batch to start grouping students and restricting
-              test access.
+              Create your first batch to start grouping students and
+              restricting test access.
             </p>
             <Link
               href="/admin/batches/new"
@@ -135,7 +184,7 @@ export default async function AdminBatchesPage() {
                 key={batch.id}
                 className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
               >
-                {/* Header row */}
+                {/* Header */}
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="space-y-2">
                     <div className="flex flex-wrap gap-2 text-xs">
@@ -147,7 +196,7 @@ export default async function AdminBatchesPage() {
                         {batch.examType}
                       </span>
                       <span
-                        className={`rounded-full px-3 py-1 ring-1 ${statusBadgeClass(
+                        className={`rounded-full px-3 py-1 ring-1 font-semibold ${statusBadgeClass(
                           batch.status
                         )}`}
                       >
@@ -177,18 +226,19 @@ export default async function AdminBatchesPage() {
                     ) : null}
                   </div>
 
-                  {/* Action buttons */}
-                  <div className="flex flex-wrap gap-3">
-                    <Link
-                      href={`/admin/batches/${batch.id}/edit`}
-                      className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                    >
-                      Edit Batch
-                    </Link>
-                  </div>
+                  {/* Edit button */}
+                  <Link
+                    href={`/admin/batches/${batch.id}/edit`}
+                    className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Edit Details
+                  </Link>
                 </div>
 
-                {/* Stats row */}
+                {/* Lifecycle warning */}
+                <LifecycleWarning batch={batch} />
+
+                {/* Stats */}
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-2xl bg-slate-50 p-4">
                     <p className="text-xs uppercase tracking-wide text-slate-500">
@@ -227,32 +277,30 @@ export default async function AdminBatchesPage() {
                   </div>
                 </div>
 
-                {/* Quick action links */}
-                <div className="mt-4 flex flex-wrap gap-3 border-t border-slate-100 pt-4">
-                  <p className="w-full text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Quick Actions
-                  </p>
+                {/* Actions row */}
+                <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
+                  {/* Lifecycle status buttons — client component */}
+                  <BatchStatusActions
+                    batchId={batch.id}
+                    currentStatus={batch.status}
+                    studentCount={batch._count.studentBatches}
+                  />
 
-                  <Link
-                    href={`/admin/students?batchId=${batch.id}`}
-                    className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-                  >
-                    View Students ({batch._count.studentBatches})
-                  </Link>
+                  <div className="ml-auto flex flex-wrap gap-3">
+                    <Link
+                      href="/admin/students"
+                      className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                    >
+                      Assign Students
+                    </Link>
 
-                  <Link
-                    href="/admin/tests"
-                    className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-                  >
-                    Manage Test Access
-                  </Link>
-
-                  <Link
-                    href="/admin/students"
-                    className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
-                  >
-                    Assign Students to this Batch
-                  </Link>
+                    <Link
+                      href={`/admin/tests?batchId=${batch.id}`}
+                      className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
+                    >
+                      View Linked Tests
+                    </Link>
+                  </div>
                 </div>
               </div>
             ))}

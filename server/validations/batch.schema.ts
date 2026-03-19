@@ -70,6 +70,12 @@ export const assignStudentToBatchSchema = z.object({
     .min(1, "Select at least one batch to assign."),
 });
 
+export const updateBatchStatusSchema = z.object({
+  status: batchStatusSchema,
+});
+
+export type UpdateBatchStatusInput = z.infer<typeof updateBatchStatusSchema>;
+
 export type CreateBatchInput = z.infer<typeof createBatchSchema>;
 export type UpdateBatchInput = z.infer<typeof updateBatchSchema>;
 export type ListBatchesQueryInput = z.infer<typeof listBatchesQuerySchema>;

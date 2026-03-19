@@ -241,3 +241,40 @@ export async function findStudentBatchAssignments(studentId: string) {
     },
   });
 }
+
+/**
+ * Updates only the status field of a batch.
+ * Used by the lifecycle status change action.
+ */
+export async function updateBatchStatusRecord(
+  id: string,
+  status: "DRAFT" | "ACTIVE" | "CLOSED"
+) {
+  return prisma.batch.update({
+    where: { id },
+    data: { status },
+    include: batchInclude,
+  });
+}
+
+/**
+ * Checks if a batch can be safely deleted.
+ * Returns counts so the service can make the decision.
+ */
+export async function findBatchDeleteImpact(id: string) {
+  return prisma.batch.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      title: true,
+      slug: true,
+      status: true,
+      _count: {
+        select: {
+          studentBatches: true,
+          testBatches: true,
+        },
+      },
+    },
+  });
+}

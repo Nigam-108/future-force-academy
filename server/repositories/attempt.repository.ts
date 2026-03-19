@@ -39,6 +39,7 @@ export async function findTestForAttemptStart(testId: string) {
           batch: {
             select: {
               id: true,
+              status: true,           // ← added for lifecycle check
               studentBatches: {
                 select: {
                   studentId: true,

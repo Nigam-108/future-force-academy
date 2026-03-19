@@ -83,22 +83,41 @@ export async function startAttempt(input: StartAttemptInput, userId: string) {
   assertTestAvailableForStudentStart(test);
 
   // ── Batch access guard ──────────────────────────────────────────────────
-  // If this test is linked to one or more batches, the student must be
-  // a member of at least one of those batches to start the attempt.
+  // Rules:
+  // - No batches linked = global test, all students can start
+  // - Batches linked = student must be in at least one ACTIVE batch
+  // - CLOSED batch = student cannot start new attempt via that batch
   if (test.testBatches.length > 0) {
-    const hasAccess = test.testBatches.some((tb) =>
-      tb.batch.studentBatches.some((sb) => sb.studentId === userId)
-    );
+    const studentActiveBatchAccess = test.testBatches.some((tb) => {
+      const batchStatus = (tb.batch as { id: string; status?: string; studentBatches: { studentId: string }[] }).status;
+      const isStudentInBatch = tb.batch.studentBatches.some(
+        (sb) => sb.studentId === userId
+      );
+      // Student must be in the batch AND the batch must be ACTIVE
+      return isStudentInBatch && batchStatus === "ACTIVE";
+    });
 
-    if (!hasAccess) {
+    if (!studentActiveBatchAccess) {
+      // Check if student is in any batch (to give a better error message)
+      const isInAnyBatch = test.testBatches.some((tb) =>
+        tb.batch.studentBatches.some((sb) => sb.studentId === userId)
+      );
+
+      if (isInAnyBatch) {
+        throw new AppError(
+          "Your batch enrollment for this test has ended. Please contact your admin.",
+          403
+        );
+      }
+
       throw new AppError(
-        "You do not have access to this test. Please contact the admin.",
+        "You do not have access to this test. Please contact your admin.",
         403
       );
     }
   }
   // ── End batch access guard ──────────────────────────────────────────────
-
+  
   if (test.testQuestions.length === 0) {
     throw new AppError("This test has no assigned questions yet", 400);
   }
