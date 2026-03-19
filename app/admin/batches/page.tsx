@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageShell } from "@/components/shared/page-shell";
 import { fetchInternalApi } from "@/lib/server-api";
 import { BatchStatusActions } from "@/components/admin/batch-status-actions";
+import { DeleteBatchButton } from "@/components/admin/delete-batch-button";
 
 export const dynamic = "force-dynamic";
 
@@ -285,8 +286,7 @@ export default async function AdminBatchesPage() {
                     currentStatus={batch.status}
                     studentCount={batch._count.studentBatches}
                   />
-
-                  <div className="ml-auto flex flex-wrap gap-3">
+<div className="ml-auto flex flex-wrap gap-3">
                     <Link
                       href="/admin/students"
                       className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
@@ -300,6 +300,12 @@ export default async function AdminBatchesPage() {
                     >
                       View Linked Tests
                     </Link>
+
+                    <DeleteBatchButton
+                      batchId={batch.id}
+                      batchTitle={batch.title}
+                      studentCount={batch._count.studentBatches}
+                    />
                   </div>
                 </div>
               </div>
