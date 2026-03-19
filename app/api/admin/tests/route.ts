@@ -36,7 +36,8 @@ export async function GET(request: NextRequest) {
 
     return ok("Tests fetched successfully", result);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to fetch tests";
+    const message =
+      error instanceof Error ? error.message : "Failed to fetch tests";
     return fail(message, getStatusCode(error));
   }
 }
@@ -56,7 +57,8 @@ export async function POST(request: NextRequest) {
 
     return ok("Test created successfully", test, 201);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to create test";
+    const message =
+      error instanceof Error ? error.message : "Failed to create test";
     return fail(message, getStatusCode(error));
   }
 }

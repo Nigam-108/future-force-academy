@@ -57,6 +57,7 @@ export const listTestsQuerySchema = z.object({
   mode: z.nativeEnum(TestMode).optional(),
   structureType: z.nativeEnum(TestStructureType).optional(),
   visibilityStatus: z.nativeEnum(TestVisibilityStatus).optional(),
+  batchId: z.string().optional(),
 });
 
 export type CreateTestInput = z.infer<typeof createTestSchema>;

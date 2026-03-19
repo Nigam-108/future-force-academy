@@ -128,6 +128,7 @@ export async function listTestRecords(filters: {
   mode?: TestMode;
   structureType?: TestStructureType;
   visibilityStatus?: TestVisibilityStatus;
+  batchId?: string;
 }) {
   const where: Prisma.TestWhereInput = {
     ...(filters.search
@@ -143,6 +144,14 @@ export async function listTestRecords(filters: {
     ...(filters.structureType ? { structureType: filters.structureType } : {}),
     ...(filters.visibilityStatus
       ? { visibilityStatus: filters.visibilityStatus }
+      : {}),
+    // Filter by batch — show only tests linked to this batch
+    ...(filters.batchId
+      ? {
+          testBatches: {
+            some: { batchId: filters.batchId },
+          },
+        }
       : {}),
   };
 

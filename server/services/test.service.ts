@@ -74,7 +74,15 @@ export async function createTest(input: CreateTestInput, actorId: string) {
 }
 
 export async function listTests(input: ListTestsQueryInput) {
-  return listTestRecords(input);
+  return listTestRecords({
+    page: input.page,
+    limit: input.limit,
+    search: input.search,
+    mode: input.mode,
+    structureType: input.structureType,
+    visibilityStatus: input.visibilityStatus,
+    batchId: input.batchId,
+  });
 }
 
 export async function getTestById(id: string) {
