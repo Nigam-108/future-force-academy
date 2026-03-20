@@ -1,5 +1,4 @@
 import Link from "next/link";
-
 import { PageShell } from "@/components/shared/page-shell";
 import {
   getStudentTests,
@@ -7,22 +6,34 @@ import {
   type StudentTestMode,
   type StudentTestStatus,
 } from "@/lib/server-api";
+import { fetchInternalApi } from "@/lib/server-api";
 
 export const dynamic = "force-dynamic";
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 type StudentTestsPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
+
+type AccessSummary = {
+  totalAccessibleBatches: number;
+  batches: Array<{
+    batchId: string;
+    batchTitle: string;
+    examType: string;
+    accessPath: "ADMIN_ASSIGNED" | "PURCHASED" | "BOTH";
+  }>;
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getSingleValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
 function formatDateTime(value: string | null) {
-  if (!value) {
-    return "—";
-  }
-
+  if (!value) return "—";
   return new Intl.DateTimeFormat("en-IN", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -57,14 +68,8 @@ function getModeBadgeClasses(mode: StudentTestMode) {
 }
 
 function getActionLabel(test: StudentTestItem) {
-  if (test.studentStatus === "UPCOMING") {
-    return "View schedule";
-  }
-
-  if (test.studentStatus === "COMPLETED") {
-    return "View summary";
-  }
-
+  if (test.studentStatus === "UPCOMING") return "View schedule";
+  if (test.studentStatus === "COMPLETED") return "View summary";
   return "View instructions";
 }
 
@@ -73,7 +78,6 @@ function buildPageHref(
   nextPage: number
 ) {
   const params = new URLSearchParams();
-
   const search = getSingleValue(currentSearchParams.search);
   const mode = getSingleValue(currentSearchParams.mode);
   const studentStatus = getSingleValue(currentSearchParams.studentStatus);
@@ -81,12 +85,13 @@ function buildPageHref(
   if (search) params.set("search", search);
   if (mode) params.set("mode", mode);
   if (studentStatus) params.set("studentStatus", studentStatus);
-
   params.set("page", String(nextPage));
   params.set("limit", "10");
 
   return `/student/tests?${params.toString()}`;
 }
+
+// ─── Test card ────────────────────────────────────────────────────────────────
 
 function TestListCard({ test }: { test: StudentTestItem }) {
   const actualQuestionCount = test._count?.testQuestions ?? test.totalQuestions;
@@ -116,22 +121,13 @@ function TestListCard({ test }: { test: StudentTestItem }) {
             <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700 ring-1 ring-slate-200">
               {test.structureType}
             </span>
-
-            {test.isGlobal ? (
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 ring-1 ring-emerald-200">
-                Open
-              </span>
-            ) : (
-              <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700 ring-1 ring-amber-200">
-                Batch Access
-              </span>
-            )}
           </div>
 
           <h2 className="text-lg font-semibold text-slate-900">{test.title}</h2>
 
           <p className="max-w-3xl text-sm leading-6 text-slate-600">
-            {test.description?.trim() || "No description added for this test yet."}
+            {test.description?.trim() ||
+              "No description added for this test yet."}
           </p>
         </div>
 
@@ -183,6 +179,8 @@ function TestListCard({ test }: { test: StudentTestItem }) {
   );
 }
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default async function StudentTestsPage({
   searchParams,
 }: StudentTestsPageProps) {
@@ -195,22 +193,65 @@ export default async function StudentTestsPage({
   const studentStatus =
     getSingleValue(resolvedSearchParams.studentStatus) || "";
 
-  const result = await getStudentTests({
-    page,
-    limit,
-    search,
-    mode: mode as StudentTestMode | "",
-    studentStatus: studentStatus as StudentTestStatus | "",
-  });
+  const [result, accessResult] = await Promise.all([
+    getStudentTests({
+      page,
+      limit,
+      search,
+      mode: mode as StudentTestMode | "",
+      studentStatus: studentStatus as StudentTestStatus | "",
+    }),
+    fetchInternalApi<AccessSummary>("/api/student/access"),
+  ]);
 
   const data = result.data;
+  const access = accessResult.data;
   const currentPage = Number(page);
 
   return (
     <PageShell
       title="Tests"
-      description="Browse your real student-visible tests, filter them by mode or status, and open the instructions page before starting."
+      description="Browse your available tests based on your batch enrollments."
     >
+      {/* ── Enrollment summary banner ── */}
+      {access && access.totalAccessibleBatches > 0 ? (
+        <div className="mb-6 rounded-3xl border border-blue-100 bg-blue-50 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-blue-900">
+                You are enrolled in {access.totalAccessibleBatches} active batch
+                {access.totalAccessibleBatches !== 1 ? "es" : ""}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {access.batches.map((b) => (
+                  <span
+                    key={b.batchId}
+                    className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800"
+                    title={
+                      b.accessPath === "PURCHASED"
+                        ? "Access via purchase"
+                        : b.accessPath === "ADMIN_ASSIGNED"
+                        ? "Access via admin assignment"
+                        : "Access via purchase + assignment"
+                    }
+                  >
+                    {b.batchTitle}
+                    {b.accessPath === "PURCHASED" ? " 🎫" : " ✓"}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <Link
+              href="/student/purchases"
+              className="rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50"
+            >
+              View Enrollments
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── Filter bar ── */}
       <form
         method="GET"
         className="mb-6 grid gap-4 rounded-3xl border bg-white p-5 shadow-sm lg:grid-cols-4"
@@ -218,14 +259,14 @@ export default async function StudentTestsPage({
         <input
           name="search"
           defaultValue={search}
-          className="rounded-xl border px-4 py-3"
+          className="rounded-xl border px-4 py-3 text-sm"
           placeholder="Search by test name"
         />
 
         <select
           name="mode"
           defaultValue={mode}
-          className="rounded-xl border px-4 py-3"
+          className="rounded-xl border px-4 py-3 text-sm text-slate-700"
         >
           <option value="">All Modes</option>
           <option value="PRACTICE">Practice</option>
@@ -236,7 +277,7 @@ export default async function StudentTestsPage({
         <select
           name="studentStatus"
           defaultValue={studentStatus}
-          className="rounded-xl border px-4 py-3"
+          className="rounded-xl border px-4 py-3 text-sm text-slate-700"
         >
           <option value="">All Status</option>
           <option value="AVAILABLE">Available</option>
@@ -262,26 +303,53 @@ export default async function StudentTestsPage({
         </div>
       </form>
 
+      {/* ── Results ── */}
       {!result.success || !data ? (
         <div className="rounded-3xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-700">
           {result.message}
         </div>
       ) : data.items.length === 0 ? (
         <div className="rounded-3xl border bg-white p-8 text-center shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">No tests found</h2>
+          <h2 className="text-lg font-semibold text-slate-900">
+            No tests available
+          </h2>
           <p className="mt-2 text-sm text-slate-600">
-            Try changing the filters, or make sure at least one test is visible to
-            students in the database.
+            {access && access.totalAccessibleBatches === 0
+              ? "You are not enrolled in any batches yet. Contact your admin to get access."
+              : "No tests match your current filters. Try resetting the filters."}
           </p>
+          {access && access.totalAccessibleBatches === 0 ? (
+            <Link
+              href="/student/purchases"
+              className="mt-5 inline-flex rounded-xl border px-5 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              View Enrollments
+            </Link>
+          ) : (
+            <Link
+              href="/student/tests"
+              className="mt-5 inline-flex rounded-xl border px-5 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Reset Filters
+            </Link>
+          )}
         </div>
       ) : (
         <>
+          {/* Stats */}
+          <div className="mb-4 flex items-center justify-between">
+            <p className="text-sm text-slate-600">
+              {data.total} test{data.total !== 1 ? "s" : ""} available
+            </p>
+          </div>
+
           <div className="grid gap-6">
             {data.items.map((test) => (
               <TestListCard key={test.id} test={test} />
             ))}
           </div>
 
+          {/* Pagination */}
           {data.totalPages > 1 ? (
             <div className="mt-6 flex items-center justify-between rounded-2xl border bg-white p-4 shadow-sm">
               <div className="text-sm text-slate-600">

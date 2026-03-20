@@ -2,18 +2,7 @@ import Link from "next/link";
 import { PageShell } from "@/components/shared/page-shell";
 import { fetchInternalApi } from "@/lib/server-api";
 
-type BatchMembership = {
-  id: string;
-  assignedAt: string;
-  batch: {
-    id: string;
-    title: string;
-    slug: string;
-    examType: string;
-    status: string;
-    isPaid: boolean;
-  };
-};
+export const dynamic = "force-dynamic";
 
 type StudentDashboardResponse = {
   student: {
@@ -43,29 +32,46 @@ type StudentDashboardResponse = {
       };
     }>;
   };
-  batchMemberships: BatchMembership[];
 };
 
-function examTypeBadgeClass(examType: string) {
-  switch (examType) {
-    case "WPSI":
-      return "bg-blue-50 text-blue-700";
-    case "GPSC":
-      return "bg-violet-50 text-violet-700";
-    case "UPSC":
-      return "bg-indigo-50 text-indigo-700";
-    case "TECHNICAL_OPERATOR":
-      return "bg-sky-50 text-sky-700";
+type AccessSummary = {
+  totalAccessibleBatches: number;
+  batches: Array<{
+    batchId: string;
+    batchTitle: string;
+    examType: string;
+    accessPath: "ADMIN_ASSIGNED" | "PURCHASED" | "BOTH";
+    linkedTests: Array<{ id: string; title: string }>;
+  }>;
+};
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function accessPathLabel(path: string) {
+  switch (path) {
+    case "PURCHASED":
+      return "Purchased";
+    case "ADMIN_ASSIGNED":
+      return "Admin Enrolled";
+    case "BOTH":
+      return "Purchased + Enrolled";
     default:
-      return "bg-slate-100 text-slate-700";
+      return path;
   }
 }
 
 export default async function StudentDashboardPage() {
-  const result =
-    await fetchInternalApi<StudentDashboardResponse>("/api/student/dashboard");
+  const [dashResult, accessResult] = await Promise.all([
+    fetchInternalApi<StudentDashboardResponse>("/api/student/dashboard"),
+    fetchInternalApi<AccessSummary>("/api/student/access"),
+  ]);
 
-  if (!result.success || !result.data) {
+  if (!dashResult.success || !dashResult.data) {
     return (
       <PageShell
         title="Dashboard"
@@ -75,20 +81,21 @@ export default async function StudentDashboardPage() {
           <h2 className="text-xl font-semibold text-slate-900">
             Unable to load dashboard
           </h2>
-          <p className="mt-2 text-sm text-slate-600">{result.message}</p>
+          <p className="mt-2 text-sm text-slate-600">{dashResult.message}</p>
         </div>
       </PageShell>
     );
   }
 
-  const { student, stats, batchMemberships } = result.data;
+  const { student, stats } = dashResult.data;
+  const access = accessResult.data;
 
   return (
     <PageShell
       title="Dashboard"
       description="Track your enrolled tests, upcoming tests, and results."
     >
-      {/* Hero banner */}
+      {/* ── Welcome banner ── */}
       <div className="mb-8 rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-blue-900 p-8 text-white shadow-sm">
         <div className="max-w-3xl">
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-200">
@@ -99,7 +106,7 @@ export default async function StudentDashboardPage() {
           </h2>
           <p className="mt-3 text-sm text-slate-300">
             Continue your exam journey with structured tests, result tracking,
-            and profile management.
+            and performance analysis.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
@@ -107,6 +114,12 @@ export default async function StudentDashboardPage() {
               className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700"
             >
               Go to Tests
+            </Link>
+            <Link
+              href="/student/purchases"
+              className="rounded-xl border border-white/20 px-4 py-3 text-sm font-semibold text-white hover:bg-white/10"
+            >
+              My Enrollments
             </Link>
             <Link
               href="/student/results"
@@ -118,8 +131,8 @@ export default async function StudentDashboardPage() {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-6 md:grid-cols-3">
+      {/* ── Stats grid ── */}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-3xl border bg-white p-6 shadow-sm">
           <p className="text-sm text-slate-500">Total Attempts</p>
           <p className="mt-2 text-3xl font-bold text-slate-900">
@@ -128,99 +141,98 @@ export default async function StudentDashboardPage() {
         </div>
         <div className="rounded-3xl border bg-white p-6 shadow-sm">
           <p className="text-sm text-slate-500">In Progress</p>
-          <p className="mt-2 text-3xl font-bold text-slate-900">
+          <p className="mt-2 text-3xl font-bold text-amber-600">
             {stats.inProgressAttempts}
           </p>
         </div>
         <div className="rounded-3xl border bg-white p-6 shadow-sm">
           <p className="text-sm text-slate-500">Submitted</p>
-          <p className="mt-2 text-3xl font-bold text-slate-900">
+          <p className="mt-2 text-3xl font-bold text-emerald-700">
             {stats.submittedAttempts}
+          </p>
+        </div>
+        <div className="rounded-3xl border bg-white p-6 shadow-sm">
+          <p className="text-sm text-slate-500">Active Enrollments</p>
+          <p className="mt-2 text-3xl font-bold text-blue-700">
+            {access?.totalAccessibleBatches ?? 0}
           </p>
         </div>
       </div>
 
-      {/* Enrolled batches */}
-      <div className="mt-8 rounded-3xl border bg-white p-6 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-slate-900">
-            Enrolled Batches
-          </h2>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-            {batchMemberships.length} enrolled
-          </span>
-        </div>
-
-        {batchMemberships.length === 0 ? (
-          <div className="mt-4 rounded-2xl border border-dashed p-6 text-center">
-            <p className="text-sm text-slate-500">
-              You are not enrolled in any batch yet.
-            </p>
-            <p className="mt-1 text-xs text-slate-400">
-              Contact your admin to get enrolled in the relevant exam batch.
-            </p>
+      {/* ── Active batch enrollments ── */}
+      {access && access.batches.length > 0 ? (
+        <div className="mt-8 rounded-3xl border bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Your Batch Enrollments
+            </h2>
+            <Link
+              href="/student/purchases"
+              className="text-sm font-medium text-blue-600 hover:underline"
+            >
+              View all →
+            </Link>
           </div>
-        ) : (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {batchMemberships.map((membership) => (
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {access.batches.map((batch) => (
               <div
-                key={membership.id}
-                className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                key={batch.batchId}
+                className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
               >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <h3 className="font-semibold text-slate-900">
-                    {membership.batch.title}
-                  </h3>
-                  <span
-                    className={`rounded-full px-2 py-1 text-xs font-semibold ${examTypeBadgeClass(
-                      membership.batch.examType
-                    )}`}
-                  >
-                    {membership.batch.examType}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold text-slate-900">
+                      {batch.batchTitle}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {batch.examType} ·{" "}
+                      {batch.linkedTests.length} test
+                      {batch.linkedTests.length !== 1 ? "s" : ""} available
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                    {accessPathLabel(batch.accessPath)}
                   </span>
                 </div>
-                <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                  <span
-                    className={`rounded-full px-2 py-1 font-medium ${
-                      membership.batch.status === "ACTIVE"
-                        ? "bg-emerald-50 text-emerald-700"
-                        : membership.batch.status === "DRAFT"
-                        ? "bg-amber-50 text-amber-700"
-                        : "bg-slate-200 text-slate-600"
-                    }`}
-                  >
-                    {membership.batch.status}
-                  </span>
-                  <span
-                    className={`rounded-full px-2 py-1 font-medium ${
-                      membership.batch.isPaid
-                        ? "bg-blue-50 text-blue-700"
-                        : "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {membership.batch.isPaid ? "Paid" : "Free"}
-                  </span>
-                </div>
-                <p className="mt-2 text-xs text-slate-400">
-                  Enrolled{" "}
-                  {new Intl.DateTimeFormat("en-IN", {
-                    dateStyle: "medium",
-                  }).format(new Date(membership.assignedAt))}
-                </p>
+                <Link
+                  href="/student/tests"
+                  className="mt-3 block rounded-xl border border-slate-200 bg-white px-3 py-2 text-center text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  View Tests
+                </Link>
               </div>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="mt-8 rounded-3xl border border-dashed bg-white p-6 text-center shadow-sm">
+          <p className="font-semibold text-slate-900">No active enrollments</p>
+          <p className="mt-1 text-sm text-slate-500">
+            Contact your admin to get enrolled in a batch and access tests.
+          </p>
+        </div>
+      )}
 
-      {/* Recent attempts */}
+      {/* ── Recent attempts ── */}
       <div className="mt-8 rounded-3xl border bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">
-          Recent Attempts
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-900">
+            Recent Attempts
+          </h2>
+          <Link
+            href="/student/results"
+            className="text-sm font-medium text-blue-600 hover:underline"
+          >
+            View all results →
+          </Link>
+        </div>
+
         <div className="mt-4 space-y-4">
           {stats.recentAttempts.length === 0 ? (
-            <p className="text-sm text-slate-600">No attempts yet.</p>
+            <p className="text-sm text-slate-600">
+              No attempts yet. Start a test to see your progress here.
+            </p>
           ) : (
             stats.recentAttempts.map((attempt) => (
               <div key={attempt.id} className="rounded-2xl border p-4">
@@ -230,11 +242,40 @@ export default async function StudentDashboardPage() {
                       {attempt.test.title}
                     </p>
                     <p className="mt-1 text-sm text-slate-600">
-                      Status: {attempt.status} • Mode: {attempt.test.mode}
+                      Status:{" "}
+                      <span
+                        className={
+                          attempt.status === "SUBMITTED"
+                            ? "text-emerald-700 font-medium"
+                            : attempt.status === "IN_PROGRESS"
+                            ? "text-amber-600 font-medium"
+                            : "text-slate-600"
+                        }
+                      >
+                        {attempt.status}
+                      </span>{" "}
+                      · Mode: {attempt.test.mode}
                     </p>
                   </div>
-                  <div className="text-sm text-slate-500">
-                    {new Date(attempt.createdAt).toLocaleString()}
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-slate-500">
+                      {formatDateTime(attempt.createdAt)}
+                    </span>
+                    {attempt.status === "SUBMITTED" ? (
+                      <Link
+                        href={`/student/results`}
+                        className="rounded-xl border px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        View Result
+                      </Link>
+                    ) : attempt.status === "IN_PROGRESS" ? (
+                      <Link
+                        href={`/student/tests/${attempt.test.id}/instructions`}
+                        className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100"
+                      >
+                        Resume
+                      </Link>
+                    ) : null}
                   </div>
                 </div>
               </div>
