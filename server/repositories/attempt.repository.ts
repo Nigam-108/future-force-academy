@@ -16,6 +16,12 @@ import { prisma } from "@/server/db/prisma";
  * Fetches a test before starting an attempt.
  * Now includes testBatches so the service can enforce batch access.
  */
+/**
+ * Fetches a test before starting an attempt.
+ *
+ * Now includes both StudentBatch and Purchase data
+ * so the service can enforce access via either path.
+ */
 export async function findTestForAttemptStart(testId: string) {
   return prisma.test.findUnique({
     where: { id: testId },
@@ -39,11 +45,15 @@ export async function findTestForAttemptStart(testId: string) {
           batch: {
             select: {
               id: true,
-              status: true,           // ← added for lifecycle check
+              status: true,
+              // Path 1: admin manual assignment
               studentBatches: {
-                select: {
-                  studentId: true,
-                },
+                select: { studentId: true },
+              },
+              // Path 2: purchase / enrollment
+              purchases: {
+                where: { status: "ACTIVE" },
+                select: { userId: true },
               },
             },
           },

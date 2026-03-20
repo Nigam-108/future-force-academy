@@ -4,6 +4,7 @@ import { ok, fail } from "@/server/utils/api-response";
 import { AppError } from "@/server/utils/errors";
 import { prisma } from "@/server/db/prisma";
 import { TestMode, TestVisibilityStatus } from "@prisma/client";
+import { studentHasBatchAccess } from "@/server/services/access.service";
 
 function deriveStudentTestStatus(test: {
   mode: TestMode;
@@ -50,13 +51,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         _count: { select: { testQuestions: true } },
         testBatches: {
           select: {
+            batchId: true,
             batch: {
               select: {
                 id: true,
-                studentBatches: {
-                  where: { studentId: session.userId },
-                  select: { id: true },
-                },
+                status: true,
               },
             },
           },
@@ -72,23 +71,47 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       throw new AppError("Test is not available", 403);
     }
 
-    // Batch-access check
+    // Batch-access check using central resolver
     if (test.testBatches.length > 0) {
-      const hasAccess = test.testBatches.some(
-        (tb) => tb.batch.studentBatches.length > 0
+      // Check all active batches this test is linked to
+      const activeBatches = test.testBatches.filter(
+        (tb) => tb.batch.status === "ACTIVE"
       );
 
+      if (activeBatches.length === 0) {
+        throw new AppError(
+          "This test is currently unavailable — all linked batches are closed.",
+          403
+        );
+      }
+
+      // Check if student has access to at least one active batch
+      const accessChecks = await Promise.all(
+        activeBatches.map((tb) =>
+          studentHasBatchAccess(session.userId, tb.batchId)
+        )
+      );
+
+      const hasAccess = accessChecks.some(Boolean);
+
       if (!hasAccess) {
-        throw new AppError("You do not have access to this test", 403);
+        throw new AppError(
+          "You do not have access to this test. Please purchase or contact your admin.",
+          403
+        );
       }
     }
 
     const studentStatus = deriveStudentTestStatus(test);
 
-    // Strip internal batch membership data from response
+    // Remove internal batch data from student response
     const { testBatches: _testBatches, ...testData } = test;
 
-    return ok("Test fetched successfully", { ...testData, studentStatus }, 200);
+    return ok(
+      "Test fetched successfully",
+      { ...testData, studentStatus },
+      200
+    );
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to fetch test";

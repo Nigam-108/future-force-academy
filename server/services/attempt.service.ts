@@ -87,21 +87,45 @@ export async function startAttempt(input: StartAttemptInput, userId: string) {
   // - No batches linked = global test, all students can start
   // - Batches linked = student must be in at least one ACTIVE batch
   // - CLOSED batch = student cannot start new attempt via that batch
+  // - Batches linked = student must have access via EITHER:
+  //   a) StudentBatch record (admin assigned) + batch is ACTIVE
+  //   b) Active Purchase record (paid/enrolled) + batch is ACTIVE
   if (test.testBatches.length > 0) {
-    const studentActiveBatchAccess = test.testBatches.some((tb) => {
-      const batchStatus = (tb.batch as { id: string; status?: string; studentBatches: { studentId: string }[] }).status;
-      const isStudentInBatch = tb.batch.studentBatches.some(
+    const hasActiveAccess = test.testBatches.some((tb) => {
+      // Batch must be ACTIVE for access to work
+      if (tb.batch.status !== "ACTIVE") return false;
+
+      // Path 1: admin manually assigned student to batch
+      const viaStudentBatch = tb.batch.studentBatches.some(
         (sb) => sb.studentId === userId
       );
-      // Student must be in the batch AND the batch must be ACTIVE
-      return isStudentInBatch && batchStatus === "ACTIVE";
+
+      // Path 2: student has an active purchase for this batch
+      const viaPurchase = tb.batch.purchases.some(
+        (p) => p.userId === userId
+      );
+
+      return viaStudentBatch || viaPurchase;
     });
 
-    if (!studentActiveBatchAccess) {
-      // Check if student is in any batch (to give a better error message)
-      const isInAnyBatch = test.testBatches.some((tb) =>
-        tb.batch.studentBatches.some((sb) => sb.studentId === userId)
+    if (!hasActiveAccess) {
+      // Give more specific error based on what's wrong
+      const isInAnyBatch = test.testBatches.some(
+        (tb) =>
+          tb.batch.studentBatches.some((sb) => sb.studentId === userId) ||
+          tb.batch.purchases.some((p) => p.userId === userId)
       );
+
+      const allBatchesClosed = test.testBatches.every(
+        (tb) => tb.batch.status !== "ACTIVE"
+      );
+
+      if (allBatchesClosed) {
+        throw new AppError(
+          "This test is currently unavailable — all linked batches are closed.",
+          403
+        );
+      }
 
       if (isInAnyBatch) {
         throw new AppError(
@@ -111,7 +135,7 @@ export async function startAttempt(input: StartAttemptInput, userId: string) {
       }
 
       throw new AppError(
-        "You do not have access to this test. Please contact your admin.",
+        "You do not have access to this test. Please purchase or contact your admin.",
         403
       );
     }

@@ -3,11 +3,16 @@
     "version": "0.1.0",
     "private": true,
     "scripts": {
-        "dev": "next dev",
-        "build": "next build",
-        "start": "next start",
-        "lint": "next lint"
-    },
+  "dev": "next dev",
+  "build": "next build",
+  "start": "next start",
+  "lint": "next lint",
+  "prisma:generate": "prisma generate",
+  "prisma:migrate": "prisma migrate dev",
+  "prisma:studio": "prisma studio",
+  "prisma:seed": "tsx prisma/seed.ts",
+  "prisma:reset": "prisma migrate reset && tsx prisma/seed.ts"
+},
     "dependencies": {
         "@prisma/client": "^6.19.0",
         "bcryptjs": "^3.0.3",
@@ -42,3 +47,5 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx prisma/seed.ts"
 }
+
+

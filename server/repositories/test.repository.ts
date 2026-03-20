@@ -181,8 +181,10 @@ export async function listTestRecords(filters: {
  * Batch-aware student test listing.
  *
  * Visibility rule:
- * - No TestBatch rows for the test = global test, all students see it
- * - TestBatch rows exist = only students in those batches see it
+ * - No TestBatch rows = global test, all students see it
+ * - TestBatch rows exist = student must have access via EITHER:
+ *   a) StudentBatch record (admin assigned)
+ *   b) Active Purchase record (paid/enrolled)
  */
 export async function listStudentVisibleTestRecords(filters: {
   page: number;
@@ -193,15 +195,30 @@ export async function listStudentVisibleTestRecords(filters: {
 }) {
   const batchAccessFilter: Prisma.TestWhereInput = {
     OR: [
-      // Global test: no batch restrictions
+      // Global test — no batch restrictions
       { testBatches: { none: {} } },
-      // Batch-restricted test: student is in at least one linked batch
+      // Batch-restricted — student has access via StudentBatch
       {
         testBatches: {
           some: {
             batch: {
               studentBatches: {
                 some: { studentId: filters.userId },
+              },
+            },
+          },
+        },
+      },
+      // Batch-restricted — student has access via active Purchase
+      {
+        testBatches: {
+          some: {
+            batch: {
+              purchases: {
+                some: {
+                  userId: filters.userId,
+                  status: "ACTIVE",
+                },
               },
             },
           },
