@@ -241,3 +241,35 @@ export function formatAmountFromPaise(paise: number): string {
     minimumFractionDigits: 0,
   }).format(rupees);
 }
+
+/**
+ * Finds a purchase by ID for admin detail view.
+ */
+export async function findPurchaseById(id: string) {
+  return prisma.purchase.findUnique({
+    where: { id },
+    include: purchaseInclude,
+  });
+}
+
+/**
+ * Lists all purchases for one student — admin view.
+ */
+export async function listPurchasesByStudent(userId: string) {
+  return prisma.purchase.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    include: purchaseInclude,
+  });
+}
+
+/**
+ * Lists all payments for one student — admin view.
+ */
+export async function listPaymentsByStudent(userId: string) {
+  return prisma.payment.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    include: paymentInclude,
+  });
+}

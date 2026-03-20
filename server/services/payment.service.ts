@@ -9,6 +9,8 @@ import {
   getPaymentSummaryStats,
   listPaymentRecords,
   listStudentPurchases,
+  listPaymentsByStudent, 
+  listPurchasesByStudent,
   updatePaymentStatusRecord,
 } from "@/server/repositories/payment.repository";
 import { prisma } from "@/server/db/prisma";
@@ -17,6 +19,8 @@ import type {
   ManualEnrollInput,
   UpdatePaymentStatusInput,
 } from "@/server/validations/payment.schema";
+
+
 
 // ─── Admin payment services ───────────────────────────────────────────────────
 
@@ -227,4 +231,122 @@ export async function getStudentPurchases(userId: string) {
       (purchase.validUntil !== null &&
         new Date() > new Date(purchase.validUntil)),
   }));
+}
+
+/**
+ * Returns a single purchase record for admin detail view.
+ */
+export async function getAdminPurchaseById(purchaseId: string) {
+  const purchase = await prisma.purchase.findUnique({
+    where: { id: purchaseId },
+    include: {
+      user: {
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          mobileNumber: true,
+        },
+      },
+      batch: {
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          examType: true,
+          isPaid: true,
+        },
+      },
+      payment: {
+        select: {
+          id: true,
+          amount: true,
+          currency: true,
+          status: true,
+          gateway: true,
+          paidAt: true,
+          notes: true,
+        },
+      },
+    },
+  });
+
+  if (!purchase) {
+    throw new AppError("Purchase not found", 404);
+  }
+
+  return purchase;
+}
+
+/**
+ * Admin cancels a purchase manually.
+ * Used for refunds, admin corrections, or access revocation.
+ */
+export async function cancelPurchase(purchaseId: string) {
+  const purchase = await prisma.purchase.findUnique({
+    where: { id: purchaseId },
+    select: {
+      id: true,
+      status: true,
+      userId: true,
+      batchId: true,
+    },
+  });
+
+  if (!purchase) {
+    throw new AppError("Purchase not found", 404);
+  }
+
+  if (purchase.status === "CANCELLED") {
+    throw new AppError("Purchase is already cancelled", 400);
+  }
+
+  const updated = await prisma.purchase.update({
+    where: { id: purchaseId },
+    data: { status: "CANCELLED" },
+    include: {
+      user: { select: { id: true, fullName: true, email: true } },
+      batch: { select: { id: true, title: true } },
+    },
+  });
+
+  return {
+    purchaseId: updated.id,
+    status: updated.status,
+    user: updated.user,
+    batch: updated.batch,
+    message: `Purchase cancelled for ${updated.user.fullName} in "${updated.batch.title}"`,
+  };
+}
+
+/**
+ * Returns full payment + purchase history for one student.
+ * Used on the admin student detail page.
+ */
+export async function getStudentPurchaseHistory(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, fullName: true, email: true },
+  });
+
+  if (!user) {
+    throw new AppError("Student not found", 404);
+  }
+
+  const [payments, purchases] = await Promise.all([
+    listPaymentsByStudent(userId),
+    listPurchasesByStudent(userId),
+  ]);
+
+  return {
+    user,
+    payments: payments.map((p) => ({
+      ...p,
+      amountFormatted: formatAmountFromPaise(p.amount),
+    })),
+    purchases,
+    totalPayments: payments.length,
+    totalPurchases: purchases.length,
+    activePurchases: purchases.filter((p) => p.status === "ACTIVE").length,
+  };
 }
