@@ -6,6 +6,7 @@ import {
   GitBranch,
   KeyRound,
   Pencil,
+  Globe,
 } from "lucide-react";
 import { DeleteTestButton } from "@/components/admin/delete-test-button";
 import { DuplicateTestButton } from "@/components/admin/duplicate-test-button";
@@ -150,224 +151,264 @@ function badgeClass(
   }
 }
 
+/**
+ * Returns card border + accent color based on what batches a test is linked to.
+ * If multiple exam types are linked, uses a mixed/multi color.
+ */
+function getBatchColorScheme(testBatches: TestBatchItem[]): {
+  border: string;
+  badge: string;
+  dot: string;
+  label: string;
+} {
+  if (testBatches.length === 0) {
+    return {
+      border: "border-l-4 border-l-emerald-400",
+      badge: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+      dot: "bg-emerald-400",
+      label: "Global",
+    };
+  }
+
+  const examTypes = [...new Set(testBatches.map((tb) => tb.batch.examType))];
+
+  // Multiple different exam types
+  if (examTypes.length > 1) {
+    return {
+      border: "border-l-4 border-l-pink-400",
+      badge: "bg-pink-50 text-pink-700 ring-pink-200",
+      dot: "bg-pink-400",
+      label: `${testBatches.length} batches`,
+    };
+  }
+
+  const examType = examTypes[0];
+
+  switch (examType) {
+    case "GPSC":
+      return {
+        border: "border-l-4 border-l-blue-400",
+        badge: "bg-blue-50 text-blue-700 ring-blue-200",
+        dot: "bg-blue-400",
+        label: `GPSC · ${testBatches.length} batch${testBatches.length !== 1 ? "es" : ""}`,
+      };
+    case "UPSC":
+      return {
+        border: "border-l-4 border-l-purple-400",
+        badge: "bg-purple-50 text-purple-700 ring-purple-200",
+        dot: "bg-purple-400",
+        label: `UPSC · ${testBatches.length} batch${testBatches.length !== 1 ? "es" : ""}`,
+      };
+    case "WPSI":
+      return {
+        border: "border-l-4 border-l-orange-400",
+        badge: "bg-orange-50 text-orange-700 ring-orange-200",
+        dot: "bg-orange-400",
+        label: `WPSI · ${testBatches.length} batch${testBatches.length !== 1 ? "es" : ""}`,
+      };
+    case "TECHNICAL_OPERATOR":
+      return {
+        border: "border-l-4 border-l-cyan-400",
+        badge: "bg-cyan-50 text-cyan-700 ring-cyan-200",
+        dot: "bg-cyan-400",
+        label: `Tech · ${testBatches.length} batch${testBatches.length !== 1 ? "es" : ""}`,
+      };
+    default:
+      return {
+        border: "border-l-4 border-l-slate-400",
+        badge: "bg-slate-100 text-slate-600 ring-slate-200",
+        dot: "bg-slate-400",
+        label: `${testBatches.length} batch${testBatches.length !== 1 ? "es" : ""}`,
+      };
+  }
+}
+
 // ─── TestCard component ─────────────────────────────────────────────────────
 
 function TestCard({ test }: { test: AdminTestItem }) {
+  const colorScheme = getBatchColorScheme(test.testBatches);
+
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      {/* Top row: badges + title + actions */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-2 text-xs">
-            <span
-              className={`rounded-full px-3 py-1 ring-1 ${badgeClass(
-                test.mode
-              )}`}
-            >
-              {test.mode}
-            </span>
-            <span
-              className={`rounded-full px-3 py-1 ring-1 ${badgeClass(
-                test.structureType
-              )}`}
-            >
-              {test.structureType}
-            </span>
-            <span
-              className={`rounded-full px-3 py-1 ring-1 ${badgeClass(
-                test.visibilityStatus
-              )}`}
-            >
-              {test.visibilityStatus}
-            </span>
-          </div>
+    <div
+      className={`rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden ${colorScheme.border}`}
+    >
+      <div className="p-5">
+        {/* Top row: badges + title + actions */}
+        <div className="flex flex-wrap items-start justify-between gap-3">
 
-          <h2 className="text-xl font-semibold text-slate-900">{test.title}</h2>
-          <p className="text-sm text-slate-500">Slug: {test.slug}</p>
-        </div>
-
-         {/* Action buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-
-          {/* ── Icon buttons — simple navigation actions ── */}
-          <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1">
-
-            {/* Manage Questions */}
-            <Link
-              href={`/admin/tests/${test.id}/questions`}
-              title="Manage Questions"
-              className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-indigo-100 hover:text-indigo-700"
-            >
-              <ClipboardList size={16} />
-              <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                Manage Questions
-              </span>
-            </Link>
-
-            {/* Assign Batches */}
-            <Link
-              href={`/admin/tests/${test.id}/batches`}
-              title="Assign Batches"
-              className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-blue-100 hover:text-blue-700"
-            >
-              <GitBranch size={16} />
-              <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                Assign Batches
-              </span>
-            </Link>
-
-            {/* View Paper */}
-            <Link
-              href={`/admin/tests/${test.id}/paper`}
-              title="View Paper"
-              className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-violet-100 hover:text-violet-700"
-            >
-              <Eye size={16} />
-              <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                View Paper
-              </span>
-            </Link>
-
-            {/* Answer Key */}
-            <Link
-              href={`/admin/tests/${test.id}/answer-key`}
-              title="Answer Key"
-              className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-amber-100 hover:text-amber-700"
-            >
-              <KeyRound size={16} />
-              <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                Answer Key
-              </span>
-            </Link>
-
-            {/* Analytics */}
-            <Link
-              href={`/admin/tests/${test.id}/analytics`}
-              title="Analytics"
-              className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-emerald-100 hover:text-emerald-700"
-            >
-              <BarChart2 size={16} />
-              <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                Analytics
-              </span>
-            </Link>
-
-            {/* Edit */}
-            <Link
-              href={`/admin/tests/${test.id}/edit`}
-              title="Edit Test"
-              className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-200 hover:text-slate-800"
-            >
-              <Pencil size={16} />
-              <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                Edit
-              </span>
-            </Link>
-          </div>
-
-          {/* ── Text buttons — complex actions with dialogs ── */}
-          <div className="flex items-center gap-2">
-            <DuplicateTestButton testId={test.id} title={test.title} />
-            <DeleteTestButton testId={test.id} title={test.title} />
-          </div>
-
-        </div>
-      </div>
-
-      {/* Description */}
-      <p className="mt-4 text-sm text-slate-600">
-        {truncateText(test.description)}
-      </p>
-
-      {/* Batch access row */}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Access:
-        </span>
-
-        {test.testBatches.length === 0 ? (
-          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
-            Global — all students
-          </span>
-        ) : (
-          <>
-            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
-              Restricted to {test.testBatches.length} batch
-              {test.testBatches.length !== 1 ? "es" : ""}
-            </span>
-            {test.testBatches.slice(0, 3).map((tb) => (
-              <Link
-                key={tb.id}
-                href={`/admin/tests?batchId=${tb.batch.id}`}
-                className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200"
-                title={`Filter tests in ${tb.batch.title}`}
+          {/* Left — badges + title */}
+          <div className="space-y-2 min-w-0 flex-1">
+            <div className="flex flex-wrap gap-1.5 text-xs">
+              {/* Batch color badge */}
+              <span
+                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${colorScheme.badge}`}
               >
-                {tb.batch.title}
-              </Link>
-            ))}
-            {test.testBatches.length > 3 ? (
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
-                +{test.testBatches.length - 3} more
+                {test.testBatches.length === 0 ? (
+                  <Globe size={11} />
+                ) : (
+                  <span className={`h-1.5 w-1.5 rounded-full ${colorScheme.dot}`} />
+                )}
+                {colorScheme.label}
               </span>
+
+              <span className={`rounded-full px-2.5 py-1 ring-1 ${badgeClass(test.mode)}`}>
+                {test.mode}
+              </span>
+              <span className={`rounded-full px-2.5 py-1 ring-1 ${badgeClass(test.structureType)}`}>
+                {test.structureType}
+              </span>
+              <span className={`rounded-full px-2.5 py-1 ring-1 ${badgeClass(test.visibilityStatus)}`}>
+                {test.visibilityStatus}
+              </span>
+            </div>
+
+            <h2 className="text-lg font-semibold text-slate-900 leading-snug">
+              {test.title}
+            </h2>
+
+            {/* Batch names — compact pills */}
+            {test.testBatches.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {test.testBatches.slice(0, 3).map((tb) => (
+                  <Link
+                    key={tb.id}
+                    href={`/admin/tests?batchId=${tb.batch.id}`}
+                    className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition-colors"
+                    title={`Filter tests in ${tb.batch.title}`}
+                  >
+                    {tb.batch.title}
+                  </Link>
+                ))}
+                {test.testBatches.length > 3 ? (
+                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] text-slate-400">
+                    +{test.testBatches.length - 3} more
+                  </span>
+                ) : null}
+              </div>
             ) : null}
-          </>
-        )}
-      </div>
+          </div>
 
-      {/* Stats grid */}
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-500">
-            Questions
-          </p>
-          <p className="mt-1 text-xl font-semibold text-slate-900">
-            {test._count.testQuestions}
-          </p>
+          {/* Right — action buttons */}
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            {/* Icon pill */}
+            <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1">
+              <Link
+                href={`/admin/tests/${test.id}/questions`}
+                title="Manage Questions"
+                className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-indigo-100 hover:text-indigo-700"
+              >
+                <ClipboardList size={15} />
+                <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                  Questions
+                </span>
+              </Link>
+
+              <Link
+                href={`/admin/tests/${test.id}/batches`}
+                title="Assign Batches"
+                className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-blue-100 hover:text-blue-700"
+              >
+                <GitBranch size={15} />
+                <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                  Batches
+                </span>
+              </Link>
+
+              <Link
+                href={`/admin/tests/${test.id}/paper`}
+                title="View Paper"
+                className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-violet-100 hover:text-violet-700"
+              >
+                <Eye size={15} />
+                <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                  Paper
+                </span>
+              </Link>
+
+              <Link
+                href={`/admin/tests/${test.id}/answer-key`}
+                title="Answer Key"
+                className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-amber-100 hover:text-amber-700"
+              >
+                <KeyRound size={15} />
+                <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                  Answer Key
+                </span>
+              </Link>
+
+              <Link
+                href={`/admin/tests/${test.id}/analytics`}
+                title="Analytics"
+                className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-emerald-100 hover:text-emerald-700"
+              >
+                <BarChart2 size={15} />
+                <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                  Analytics
+                </span>
+              </Link>
+
+              <Link
+                href={`/admin/tests/${test.id}/edit`}
+                title="Edit Test"
+                className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-200 hover:text-slate-800"
+              >
+                <Pencil size={15} />
+                <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                  Edit
+                </span>
+              </Link>
+            </div>
+
+            {/* Complex actions */}
+            <div className="flex items-center gap-2">
+              <DuplicateTestButton testId={test.id} title={test.title} />
+              <DeleteTestButton testId={test.id} title={test.title} />
+            </div>
+          </div>
         </div>
 
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-500">
-            Total Marks
-          </p>
-          <p className="mt-1 text-xl font-semibold text-slate-900">
-            {test.totalMarks}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-500">
-            Duration
-          </p>
-          <p className="mt-1 text-xl font-semibold text-slate-900">
-            {test.durationInMinutes ?? "—"} min
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-500">
-            Sections
-          </p>
-          <p className="mt-1 text-xl font-semibold text-slate-900">
-            {test.sections.length}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-500">
-            Attempts
-          </p>
-          <p className="mt-1 text-xl font-semibold text-slate-900">
-            {test._count.attempts}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-500">
-            Start Window
-          </p>
-          <p className="mt-1 text-sm font-medium text-slate-900">
-            {formatDateTime(test.startAt)}
-          </p>
+        {/* Stats row — compact */}
+        <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
+          <div className="rounded-xl bg-slate-50 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Qs</p>
+            <p className="mt-0.5 text-base font-semibold text-slate-900">
+              {test._count.testQuestions}
+            </p>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Marks</p>
+            <p className="mt-0.5 text-base font-semibold text-slate-900">
+              {test.totalMarks}
+            </p>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Mins</p>
+            <p className="mt-0.5 text-base font-semibold text-slate-900">
+              {test.durationInMinutes ?? "—"}
+            </p>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Sections</p>
+            <p className="mt-0.5 text-base font-semibold text-slate-900">
+              {test.sections.length}
+            </p>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Attempts</p>
+            <p className="mt-0.5 text-base font-semibold text-slate-900">
+              {test._count.attempts}
+            </p>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Start</p>
+            <p className="mt-0.5 text-xs font-medium text-slate-900">
+              {test.startAt
+                ? new Intl.DateTimeFormat("en-IN", { dateStyle: "short" }).format(
+                    new Date(test.startAt)
+                  )
+                : "—"}
+            </p>
+          </div>
         </div>
       </div>
     </div>

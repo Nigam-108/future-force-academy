@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LayoutGrid, Tag, Ticket, Users } from "lucide-react";
 import { PageShell } from "@/components/shared/page-shell";
 import { fetchInternalApi } from "@/lib/server-api";
 import { BatchStatusActions } from "@/components/admin/batch-status-actions";
@@ -280,39 +281,74 @@ export default async function AdminBatchesPage() {
 
                 {/* Actions row */}
                 <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
-                  {/* Lifecycle status buttons — client component */}
+                  {/* Lifecycle status buttons */}
                   <BatchStatusActions
                     batchId={batch.id}
                     currentStatus={batch.status}
                     studentCount={batch._count.studentBatches}
                   />
-<div className="ml-auto flex flex-wrap gap-3">
-                    <Link
-                      href="/admin/students"
-                      className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-                    >
-                      Assign Students
-                    </Link>
 
-                    <Link
-                      href={`/admin/tests?batchId=${batch.id}`}
-                      className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
-                    >
-                      View Linked Tests
-                    </Link>
-                    <Link
-  href={`/admin/batches/${batch.id}/pricing`}
-  className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
->
-  Manage Pricing
-</Link>
+                  <div className="ml-auto flex flex-wrap items-center gap-2">
 
-<Link
-  href="/admin/coupons"
-  className="rounded-xl border px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
->
-  Manage Coupons
-</Link>
+                    {/* Icon pill for simple navigations */}
+                    <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1">
+
+                      {/* Assign Students */}
+                      <Link
+                        href="/admin/students"
+                        title="Assign Students"
+                        className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-blue-100 hover:text-blue-700"
+                      >
+                        <Users size={15} />
+                        <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                          Assign Students
+                        </span>
+                      </Link>
+
+                      {/* View Linked Tests */}
+                      <Link
+                        href={`/admin/tests?batchId=${batch.id}`}
+                        title="View Linked Tests"
+                        className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-indigo-100 hover:text-indigo-700"
+                      >
+                        <LayoutGrid size={15} />
+                        <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                          Linked Tests
+                        </span>
+                      </Link>
+
+                      {/* Manage Pricing */}
+                      <Link
+                        href={`/admin/batches/${batch.id}/pricing`}
+                        title="Manage Pricing"
+                        className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-emerald-100 hover:text-emerald-700"
+                      >
+                        <Tag size={15} />
+                        <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                          Pricing
+                        </span>
+                      </Link>
+
+                      {/* Manage Coupons */}
+                      <Link
+                        href="/admin/coupons"
+                        title="Manage Coupons"
+                        className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-violet-100 hover:text-violet-700"
+                      >
+                        <Ticket size={15} />
+                        <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                          Coupons
+                        </span>
+                      </Link>
+                    </div>
+
+                    {/* Edit Details — kept as text (form action) */}
+                    <Link
+                      href={`/admin/batches/${batch.id}/edit`}
+                      className="rounded-xl border px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Edit
+                    </Link>
 
                     <DeleteBatchButton
                       batchId={batch.id}
