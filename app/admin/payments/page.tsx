@@ -3,10 +3,12 @@ import { PageShell } from "@/components/shared/page-shell";
 import { fetchInternalApi } from "@/lib/server-api";
 import { ManualEnrollButton } from "@/components/admin/manual-enroll-button";
 import { UpdatePaymentStatusButton } from "@/components/admin/update-payment-status-button";
+import { ReconcilePaymentButton } from "@/components/admin/reconcile-payment-button";
+import { ReconcileAllButton } from "@/components/admin/reconcile-all-button";
 
 export const dynamic = "force-dynamic";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type PaymentStatus = "PENDING" | "SUCCESS" | "FAILED" | "REFUNDED";
 type PaymentGateway = "RAZORPAY" | "MANUAL";
@@ -58,7 +60,7 @@ type AdminPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getSingleValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -140,10 +142,16 @@ export default async function PaymentsPage({ searchParams }: AdminPageProps) {
   const stats = statsResult.data;
   const currentPage = Number(page);
 
+  // Count stuck pending Razorpay payments for the bulk reconcile banner
+  const stuckPendingCount =
+    data?.items.filter(
+      (p) => p.status === "PENDING" && p.gateway === "RAZORPAY"
+    ).length ?? 0;
+
   return (
     <PageShell
       title="Payments"
-      description="View payment records, update statuses, and manually enroll students."
+      description="View payment records, reconcile stuck payments, and manually enroll students."
     >
       <div className="space-y-6">
 
@@ -179,6 +187,25 @@ export default async function PaymentsPage({ searchParams }: AdminPageProps) {
               <p className="mt-1 text-2xl font-semibold text-slate-900">
                 {stats.totalRevenueFormatted}
               </p>
+            </div>
+          </div>
+        ) : null}
+
+        {/* ── Stuck payments banner + bulk reconcile ── */}
+        {stuckPendingCount > 0 ? (
+          <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="font-semibold text-amber-800">
+                  ⚠️ {stuckPendingCount} stuck pending Razorpay payment
+                  {stuckPendingCount !== 1 ? "s" : ""} on this page
+                </p>
+                <p className="mt-1 text-sm text-amber-700">
+                  These may be stuck due to missed webhooks. Sync all at once
+                  or use the inline Sync button per row.
+                </p>
+              </div>
+              <ReconcileAllButton />
             </div>
           </div>
         ) : null}
@@ -227,7 +254,7 @@ export default async function PaymentsPage({ searchParams }: AdminPageProps) {
             </button>
           </div>
 
-          {(search || status || gateway) ? (
+          {search || status || gateway ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="text-xs font-medium text-slate-500">
                 Active filters:
@@ -371,11 +398,34 @@ export default async function PaymentsPage({ searchParams }: AdminPageProps) {
                           {formatDateTime(payment.paidAt ?? payment.createdAt)}
                         </td>
 
-                        <td className="px-5 py-4 text-right">
-                          <UpdatePaymentStatusButton
-                            paymentId={payment.id}
-                            currentStatus={payment.status}
-                          />
+                        {/* ── Actions column ── */}
+                        <td className="px-5 py-4">
+                          <div className="flex flex-col items-end gap-2">
+
+                            {/* View detail link */}
+                            <Link
+                              href={`/admin/payments/${payment.id}`}
+                              className="rounded-xl border px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                              View Detail
+                            </Link>
+
+                            {/* Inline reconcile — only for stuck PENDING Razorpay */}
+                            {payment.status === "PENDING" &&
+                            payment.gateway === "RAZORPAY" ? (
+                              <ReconcilePaymentButton
+                                paymentId={payment.id}
+                                currentStatus={payment.status}
+                                compact
+                              />
+                            ) : null}
+
+                            {/* Status change */}
+                            <UpdatePaymentStatusButton
+                              paymentId={payment.id}
+                              currentStatus={payment.status}
+                            />
+                          </div>
                         </td>
                       </tr>
                     ))}

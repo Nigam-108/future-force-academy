@@ -490,8 +490,11 @@ export async function reconcilePayment(paymentId: string) {
   // Fetch from Razorpay
   const orderStatus = await fetchRazorpayOrderStatus(payment.orderId);
 
-  const previousStatus = payment.status;
-  let newStatus = previousStatus;
+  // FIX — explicitly type as full union to prevent narrowing error
+  type LocalPaymentStatus = "PENDING" | "SUCCESS" | "FAILED" | "REFUNDED";
+  const previousStatus: LocalPaymentStatus =
+    payment.status as LocalPaymentStatus;
+  let newStatus: LocalPaymentStatus = previousStatus;
   let changed = false;
   let message = "";
 

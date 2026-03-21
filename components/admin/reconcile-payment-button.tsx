@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 type Props = {
   paymentId: string;
   currentStatus: string;
+  compact?: boolean;
 };
 
 type ReconcileResult = {
@@ -20,21 +21,23 @@ type ReconcileResult = {
   };
 };
 
-export function ReconcilePaymentButton({ paymentId, currentStatus }: Props) {
+export function ReconcilePaymentButton({
+  paymentId,
+  currentStatus,
+  compact = false,
+}: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ReconcileResult | null>(null);
 
-  // Only show for PENDING or FAILED Razorpay payments
   if (currentStatus !== "PENDING" && currentStatus !== "FAILED") {
     return null;
   }
 
   async function handleReconcile() {
     const confirmed = window.confirm(
-      "This will check the real payment status with Razorpay and update our records if needed.\n\nProceed?"
+      "Check real payment status from Razorpay and update records if needed. Proceed?"
     );
-
     if (!confirmed) return;
 
     setLoading(true);
@@ -62,6 +65,36 @@ export function ReconcilePaymentButton({ paymentId, currentStatus }: Props) {
     }
   }
 
+  // ── Compact mode — for inline table rows ──────────────────────────────────
+  if (compact) {
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <button
+          type="button"
+          onClick={() => void handleReconcile()}
+          disabled={loading}
+          className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+        >
+          {loading ? "Syncing..." : "🔄 Sync"}
+        </button>
+        {result ? (
+          <p
+            className={`text-xs ${
+              result.data?.changed ? "text-emerald-700" : "text-slate-500"
+            }`}
+          >
+            {result.data?.changed
+              ? `✅ → ${result.data.newStatus}`
+              : result.data?.razorpayOrderStatus
+              ? `Rzp: ${result.data.razorpayOrderStatus}`
+              : result.message.slice(0, 30)}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  // ── Full mode — for detail page ───────────────────────────────────────────
   return (
     <div className="space-y-3">
       <button
@@ -106,8 +139,8 @@ export function ReconcilePaymentButton({ paymentId, currentStatus }: Props) {
       ) : null}
 
       <p className="text-xs text-slate-500">
-        Use this when a payment is stuck in PENDING and the webhook may have
-        been missed.
+        Use when a payment is stuck in PENDING and the webhook may have been
+        missed.
       </p>
     </div>
   );
