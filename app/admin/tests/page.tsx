@@ -1,10 +1,16 @@
 import Link from "next/link";
+import {
+  BarChart2,
+  ClipboardList,
+  Eye,
+  GitBranch,
+  KeyRound,
+  Pencil,
+} from "lucide-react";
 import { DeleteTestButton } from "@/components/admin/delete-test-button";
 import { DuplicateTestButton } from "@/components/admin/duplicate-test-button";
 import { PageShell } from "@/components/shared/page-shell";
 import { fetchInternalApi } from "@/lib/server-api";
-
-export const dynamic = "force-dynamic";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -180,52 +186,91 @@ function TestCard({ test }: { test: AdminTestItem }) {
           <p className="text-sm text-slate-500">Slug: {test.slug}</p>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex flex-wrap gap-3">
-          <Link
-            href={`/admin/tests/${test.id}/questions`}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Manage Questions
-          </Link>
+         {/* Action buttons */}
+        <div className="flex flex-wrap items-center gap-2">
 
-          <Link
-            href={`/admin/tests/${test.id}/batches`}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Assign Batches
-          </Link>
+          {/* ── Icon buttons — simple navigation actions ── */}
+          <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1">
 
-          <Link
-            href={`/admin/tests/${test.id}/paper`}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            View Paper
-          </Link>
+            {/* Manage Questions */}
+            <Link
+              href={`/admin/tests/${test.id}/questions`}
+              title="Manage Questions"
+              className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-indigo-100 hover:text-indigo-700"
+            >
+              <ClipboardList size={16} />
+              <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                Manage Questions
+              </span>
+            </Link>
 
-          <Link
-            href={`/admin/tests/${test.id}/answer-key`}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Answer Key
-          </Link>
+            {/* Assign Batches */}
+            <Link
+              href={`/admin/tests/${test.id}/batches`}
+              title="Assign Batches"
+              className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-blue-100 hover:text-blue-700"
+            >
+              <GitBranch size={16} />
+              <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                Assign Batches
+              </span>
+            </Link>
 
-          <Link
-            href={`/admin/tests/${test.id}/analytics`}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Analytics
-          </Link>
+            {/* View Paper */}
+            <Link
+              href={`/admin/tests/${test.id}/paper`}
+              title="View Paper"
+              className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-violet-100 hover:text-violet-700"
+            >
+              <Eye size={16} />
+              <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                View Paper
+              </span>
+            </Link>
 
-          <Link
-            href={`/admin/tests/${test.id}/edit`}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Edit
-          </Link>
+            {/* Answer Key */}
+            <Link
+              href={`/admin/tests/${test.id}/answer-key`}
+              title="Answer Key"
+              className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-amber-100 hover:text-amber-700"
+            >
+              <KeyRound size={16} />
+              <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                Answer Key
+              </span>
+            </Link>
 
-          <DuplicateTestButton testId={test.id} title={test.title} />
-          <DeleteTestButton testId={test.id} title={test.title} />
+            {/* Analytics */}
+            <Link
+              href={`/admin/tests/${test.id}/analytics`}
+              title="Analytics"
+              className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-emerald-100 hover:text-emerald-700"
+            >
+              <BarChart2 size={16} />
+              <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                Analytics
+              </span>
+            </Link>
+
+            {/* Edit */}
+            <Link
+              href={`/admin/tests/${test.id}/edit`}
+              title="Edit Test"
+              className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-200 hover:text-slate-800"
+            >
+              <Pencil size={16} />
+              <span className="pointer-events-none absolute -bottom-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                Edit
+              </span>
+            </Link>
+          </div>
+
+          {/* ── Text buttons — complex actions with dialogs ── */}
+          <div className="flex items-center gap-2">
+            <DuplicateTestButton testId={test.id} title={test.title} />
+            <DeleteTestButton testId={test.id} title={test.title} />
+          </div>
+
         </div>
       </div>
 
