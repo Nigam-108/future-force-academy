@@ -27,7 +27,7 @@ async function readSession(request: NextRequest) {
   }
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isStudentProtected = protectedStudentRoutes.some((route) => pathname.startsWith(route));
