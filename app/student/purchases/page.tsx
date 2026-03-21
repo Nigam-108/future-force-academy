@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { PageShell } from "@/components/shared/page-shell";
 import { fetchInternalApi } from "@/lib/server-api";
+import { RazorpayPayButton } from "@/components/student/razorpay-pay-button";
 
 export const dynamic = "force-dynamic";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type PurchaseStatus = "ACTIVE" | "EXPIRED" | "CANCELLED";
 
@@ -48,7 +49,19 @@ type PurchaseItem = {
   } | null;
 };
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+type AvailableBatch = {
+  id: string;
+  title: string;
+  slug: string;
+  examType: string;
+  description: string | null;
+  isPaid: boolean;
+  startDate: string | null;
+  endDate: string | null;
+  linkedTestCount: number;
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDate(value: string | null) {
   if (!value) return "No expiry";
@@ -96,12 +109,22 @@ function formatAmount(amount: number, gateway: string) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default async function PurchasesPage() {
-  const result = await fetchInternalApi<PurchaseItem[]>(
-    "/api/student/purchases"
-  );
+export default async function PurchasesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | undefined>>;
+}) {
+  const resolvedParams = (await searchParams) ?? {};
+  const paymentSuccess = resolvedParams.payment === "success";
 
-  const purchases = result.data ?? [];
+  const [purchaseResult, availableResult] = await Promise.all([
+    fetchInternalApi<PurchaseItem[]>("/api/student/purchases"),
+    fetchInternalApi<AvailableBatch[]>("/api/student/batches/available"),
+  ]);
+
+  const purchases = purchaseResult.data ?? [];
+  const availableBatches = availableResult.data ?? [];
+
   const activePurchases = purchases.filter((p) => p.isActive && !p.isExpired);
   const inactivePurchases = purchases.filter(
     (p) => !p.isActive || p.isExpired
@@ -110,11 +133,23 @@ export default async function PurchasesPage() {
   return (
     <PageShell
       title="My Enrollments"
-      description="View your batch enrollments and access the tests available to you."
+      description="View your batch enrollments and purchase access to paid batches."
     >
       <div className="space-y-6">
 
-        {/* ── Stats ── */}
+        {/* Payment success banner */}
+        {paymentSuccess ? (
+          <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
+            <p className="font-semibold text-emerald-800">
+              🎉 Payment successful! Your batch access has been activated.
+            </p>
+            <p className="mt-1 text-sm text-emerald-700">
+              Your enrollment is now active. You can access tests below.
+            </p>
+          </div>
+        ) : null}
+
+        {/* Stats */}
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <p className="text-sm text-slate-500">Total Enrollments</p>
@@ -139,9 +174,85 @@ export default async function PurchasesPage() {
           </div>
         </div>
 
-        {!result.success ? (
+        {/* ── Available to Purchase ── */}
+        {availableBatches.length > 0 ? (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Available Batches
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Paid batches you can enroll in right now.
+              </p>
+            </div>
+
+            {availableBatches.map((batch) => (
+              <div
+                key={batch.id}
+                className="rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 to-white p-6 shadow-sm"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span
+                        className={`rounded-full px-3 py-1 font-medium ${examTypeBadgeClass(
+                          batch.examType
+                        )}`}
+                      >
+                        {batch.examType}
+                      </span>
+                      <span className="rounded-full bg-rose-50 px-3 py-1 font-medium text-rose-700">
+                        Paid Batch
+                      </span>
+                      {batch.linkedTestCount > 0 ? (
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">
+                          {batch.linkedTestCount} test
+                          {batch.linkedTestCount !== 1 ? "s" : ""} included
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <h3 className="text-xl font-semibold text-slate-900">
+                      {batch.title}
+                    </h3>
+
+                    {batch.description ? (
+                      <p className="max-w-2xl text-sm text-slate-600">
+                        {batch.description}
+                      </p>
+                    ) : null}
+
+                    {batch.startDate || batch.endDate ? (
+                      <p className="text-sm text-slate-500">
+                        {batch.startDate
+                          ? `Starts: ${formatDate(batch.startDate)}`
+                          : ""}
+                        {batch.startDate && batch.endDate ? " · " : ""}
+                        {batch.endDate
+                          ? `Ends: ${formatDate(batch.endDate)}`
+                          : ""}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {/* Pay button */}
+                  <div className="w-full sm:w-64">
+                    <RazorpayPayButton
+                      batchId={batch.id}
+                      batchTitle={batch.title}
+                      isPaid={batch.isPaid}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {/* ── Active enrollments ── */}
+        {!purchaseResult.success ? (
           <div className="rounded-3xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
-            {result.message}
+            {purchaseResult.message}
           </div>
         ) : purchases.length === 0 ? (
           <div className="rounded-3xl border border-dashed bg-white p-10 text-center">
@@ -150,7 +261,7 @@ export default async function PurchasesPage() {
             </h2>
             <p className="mt-2 text-sm text-slate-600">
               You have not been enrolled in any batches yet. Contact your admin
-              to get access to tests.
+              or purchase a batch above.
             </p>
             <Link
               href="/student/tests"
@@ -161,7 +272,6 @@ export default async function PurchasesPage() {
           </div>
         ) : (
           <>
-            {/* ── Active enrollments ── */}
             {activePurchases.length > 0 ? (
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold text-slate-900">
@@ -173,7 +283,6 @@ export default async function PurchasesPage() {
                     key={purchase.id}
                     className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
                   >
-                    {/* Batch header */}
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div className="space-y-2">
                         <div className="flex flex-wrap gap-2 text-xs">
@@ -192,15 +301,6 @@ export default async function PurchasesPage() {
                           >
                             {statusLabel(purchase.status, purchase.isExpired)}
                           </span>
-                          {purchase.batch.isPaid ? (
-                            <span className="rounded-full bg-rose-50 px-3 py-1 font-medium text-rose-700">
-                              Paid Batch
-                            </span>
-                          ) : (
-                            <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
-                              Free Batch
-                            </span>
-                          )}
                           {purchase.payment ? (
                             <span className="rounded-full bg-purple-50 px-3 py-1 font-medium text-purple-700">
                               {formatAmount(
@@ -224,7 +324,6 @@ export default async function PurchasesPage() {
                       </Link>
                     </div>
 
-                    {/* Access details */}
                     <div className="mt-5 grid gap-3 sm:grid-cols-3">
                       <div className="rounded-2xl bg-slate-50 p-4">
                         <p className="text-xs uppercase tracking-wide text-slate-500">
@@ -234,7 +333,6 @@ export default async function PurchasesPage() {
                           {formatDate(purchase.validFrom)}
                         </p>
                       </div>
-
                       <div className="rounded-2xl bg-slate-50 p-4">
                         <p className="text-xs uppercase tracking-wide text-slate-500">
                           Valid Until
@@ -243,25 +341,20 @@ export default async function PurchasesPage() {
                           {formatDate(purchase.validUntil)}
                         </p>
                       </div>
-
                       <div className="rounded-2xl bg-slate-50 p-4">
                         <p className="text-xs uppercase tracking-wide text-slate-500">
                           Tests Available
                         </p>
                         <p className="mt-1 text-sm font-semibold text-slate-900">
-                          {purchase.linkedTests.length} live{" "}
-                          {purchase.totalLinkedTests > purchase.linkedTests.length
-                            ? `(${purchase.totalLinkedTests} total)`
-                            : ""}
+                          {purchase.linkedTests.length} live
                         </p>
                       </div>
                     </div>
 
-                    {/* Linked tests */}
                     {purchase.linkedTests.length > 0 ? (
                       <div className="mt-5">
                         <p className="mb-3 text-sm font-semibold text-slate-700">
-                          Available Tests in this Batch:
+                          Tests in this Batch:
                         </p>
                         <div className="grid gap-3 md:grid-cols-2">
                           {purchase.linkedTests.map((test) => (
@@ -299,7 +392,6 @@ export default async function PurchasesPage() {
               </div>
             ) : null}
 
-            {/* ── Past / inactive enrollments ── */}
             {inactivePurchases.length > 0 ? (
               <div className="space-y-3">
                 <h2 className="text-lg font-semibold text-slate-500">
