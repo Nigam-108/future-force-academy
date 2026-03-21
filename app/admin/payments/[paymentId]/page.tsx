@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageShell } from "@/components/shared/page-shell";
 import { fetchInternalApi } from "@/lib/server-api";
+import { ReconcilePaymentButton } from "@/components/admin/reconcile-payment-button";
 
 type PaymentDetailPageProps = {
   params: Promise<{ paymentId: string }>;
@@ -312,22 +313,48 @@ export default async function PaymentDetailPage({
             </Link>
           </div>
 
-          {/* Quick status change */}
-          <div className="rounded-3xl border bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-slate-900">
-              Update Status
-            </h3>
-            <p className="mt-2 text-sm text-slate-500">
-              Use the payments list page to change this payment&apos;s status.
-              Status changes automatically create or cancel purchase records.
-            </p>
-            <Link
-              href="/admin/payments"
-              className="mt-4 block rounded-xl bg-slate-900 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-slate-800"
-            >
-              Go to Payments List
-            </Link>
-          </div>
+          {/* Quick status change + reconciliation */}
+<div className="rounded-3xl border bg-white p-6 shadow-sm">
+  <h3 className="text-lg font-semibold text-slate-900">
+    Manage Payment
+  </h3>
+
+  {/* Reconcile button — only for RAZORPAY payments */}
+  {payment.gateway === "RAZORPAY" &&
+    (payment.status === "PENDING" || payment.status === "FAILED") ? (
+    <div className="mt-4">
+      <p className="text-sm font-medium text-slate-700">
+        Sync from Razorpay
+      </p>
+      <p className="mt-1 text-sm text-slate-500">
+        Check the actual payment status on Razorpay and update our records.
+      </p>
+      <div className="mt-3">
+        <ReconcilePaymentButton
+          paymentId={payment.id}
+          currentStatus={payment.status}
+        />
+      </div>
+    </div>
+  ) : null}
+
+  <div className="mt-5">
+    <p className="text-sm font-medium text-slate-700">
+      Manual Status Override
+    </p>
+    <p className="mt-1 text-sm text-slate-500">
+      Use the payments list page to change this payment&apos;s status
+      manually. Status changes automatically create or cancel purchase
+      records.
+    </p>
+    <Link
+      href="/admin/payments"
+      className="mt-4 block rounded-xl bg-slate-900 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-slate-800"
+    >
+      Go to Payments List
+    </Link>
+  </div>
+</div>
         </div>
       </div>
     </PageShell>

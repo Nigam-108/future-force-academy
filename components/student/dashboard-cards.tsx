@@ -2,7 +2,8 @@ const studentCards = [
   { title: "Enrolled Tests", value: "12" },
   { title: "Upcoming Tests", value: "4" },
   { title: "Past Results", value: "18" },
-  { title: "Saved Tests", value: "6" }
+  { title: "Saved Tests", value: "6" },
+  { href: "/student/payments", label: "Payment History" }
 ];
 
 export function DashboardCards() {

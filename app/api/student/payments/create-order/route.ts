@@ -3,6 +3,7 @@ import { requireAuth } from "@/server/auth/guards";
 import { ok, fail } from "@/server/utils/api-response";
 import { AppError } from "@/server/utils/errors";
 import { createRazorpayOrder } from "@/server/services/razorpay.service";
+import { prisma } from "@/server/db/prisma";
 import { z } from "zod";
 
 function getStatusCode(error: unknown) {
@@ -17,6 +18,36 @@ function getStatusCode(error: unknown) {
 const createOrderSchema = z.object({
   batchId: z.string().min(1, "Batch ID is required"),
 });
+
+/**
+ * Cancels any stale PENDING payments for the same user + batch.
+ *
+ * Prevents multiple ghost orders cluttering the DB when a student
+ * opens the modal but closes it without paying, then tries again.
+ * Only cancels orders older than 5 minutes (giving time for active sessions).
+ */
+async function cancelStalePendingPayments(
+  userId: string,
+  batchId: string
+): Promise<number> {
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+  const result = await prisma.payment.updateMany({
+    where: {
+      userId,
+      batchId,
+      status: "PENDING",
+      gateway: "RAZORPAY",
+      createdAt: { lt: fiveMinutesAgo },
+    },
+    data: {
+      status: "FAILED",
+      notes: "Cancelled — new order created by student",
+    },
+  });
+
+  return result.count;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -33,12 +64,25 @@ export async function POST(request: NextRequest) {
       return fail("Validation failed", 422, parsed.error.flatten());
     }
 
+    // Cancel any stale pending orders before creating new one
+    const cancelledCount = await cancelStalePendingPayments(
+      session.userId,
+      parsed.data.batchId
+    );
+
     const result = await createRazorpayOrder({
       userId: session.userId,
       batchId: parsed.data.batchId,
     });
 
-    return ok("Payment order created successfully", result, 201);
+    return ok(
+      "Payment order created successfully",
+      {
+        ...result,
+        staleCancelledCount: cancelledCount,
+      },
+      201
+    );
   } catch (error) {
     return fail(
       error instanceof Error ? error.message : "Failed to create order",

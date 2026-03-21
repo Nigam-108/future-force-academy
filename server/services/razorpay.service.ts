@@ -7,6 +7,7 @@ import {
   findPurchaseByUserAndBatch,
 } from "@/server/repositories/payment.repository";
 
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type CreateOrderInput = {
@@ -399,4 +400,171 @@ export async function processWebhookEvent(event: {
 
     return;
   }
+}
+
+// ─── Order status fetch ───────────────────────────────────────────────────────
+
+/**
+ * Fetches the current status of a Razorpay order directly from Razorpay.
+ * Used for reconciliation when our DB status may be out of sync.
+ */
+export async function fetchRazorpayOrderStatus(orderId: string) {
+  try {
+    const order = await razorpay.orders.fetch(orderId);
+    return {
+      orderId: order.id,
+      status: order.status,        // created | attempted | paid
+      amount: order.amount,
+      currency: order.currency,
+      attempts: order.attempts,
+    };
+  } catch (error) {
+    throw new AppError(
+      `Failed to fetch order from Razorpay: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`,
+      502
+    );
+  }
+}
+
+// ─── Reconciliation ───────────────────────────────────────────────────────────
+
+/**
+ * Reconciles a payment record with Razorpay's actual state.
+ *
+ * Use when:
+ * - A payment is stuck in PENDING after 30+ minutes
+ * - Webhook was missed or failed to deliver
+ * - Admin wants to manually verify and fix a payment
+ *
+ * Flow:
+ * 1. Fetch order status from Razorpay
+ * 2. If Razorpay says "paid" → mark our DB as SUCCESS + create Purchase
+ * 3. If Razorpay says "created" + old → mark as FAILED (stale)
+ * 4. Return what changed
+ */
+export async function reconcilePayment(paymentId: string) {
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    select: {
+      id: true,
+      orderId: true,
+      status: true,
+      userId: true,
+      batchId: true,
+      amount: true,
+      gateway: true,
+      createdAt: true,
+    },
+  });
+
+  if (!payment) {
+    throw new AppError("Payment not found", 404);
+  }
+
+  if (payment.gateway !== "RAZORPAY") {
+    throw new AppError(
+      "Reconciliation only supported for Razorpay payments",
+      400
+    );
+  }
+
+  if (!payment.orderId) {
+    throw new AppError(
+      "This payment has no Razorpay order ID — cannot reconcile",
+      400
+    );
+  }
+
+  if (payment.status === "SUCCESS" || payment.status === "REFUNDED") {
+    return {
+      paymentId: payment.id,
+      previousStatus: payment.status,
+      newStatus: payment.status,
+      changed: false,
+      message: `Payment is already ${payment.status} — no reconciliation needed`,
+    };
+  }
+
+  // Fetch from Razorpay
+  const orderStatus = await fetchRazorpayOrderStatus(payment.orderId);
+
+  const previousStatus = payment.status;
+  let newStatus = previousStatus;
+  let changed = false;
+  let message = "";
+
+  if (orderStatus.status === "paid") {
+    // Razorpay says paid — mark SUCCESS + create Purchase
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: "SUCCESS",
+        paidAt: new Date(),
+        notes: "Status reconciled from Razorpay — order marked as paid",
+      },
+    });
+
+    const existingPurchase = await findPurchaseByUserAndBatch(
+      payment.userId,
+      payment.batchId
+    );
+
+    if (!existingPurchase) {
+      await createPurchaseRecord({
+        userId: payment.userId,
+        batchId: payment.batchId,
+        paymentId: payment.id,
+      });
+    } else if (existingPurchase.status !== "ACTIVE") {
+      await prisma.purchase.update({
+        where: { id: existingPurchase.id },
+        data: { status: "ACTIVE", paymentId: payment.id },
+      });
+    }
+
+    newStatus = "SUCCESS";
+    changed = true;
+    message =
+      "Payment reconciled — Razorpay order is paid. Status updated to SUCCESS and batch access granted.";
+  } else if (orderStatus.status === "created") {
+    // Order was never attempted — check if it's stale (> 30 minutes old)
+    const ageInMinutes =
+      (Date.now() - new Date(payment.createdAt).getTime()) / 60000;
+
+    if (ageInMinutes > 30) {
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: "FAILED",
+          notes: `Reconciled — order was never attempted and is ${Math.round(
+            ageInMinutes
+          )} minutes old`,
+        },
+      });
+
+      newStatus = "FAILED";
+      changed = true;
+      message = `Payment marked FAILED — order was never attempted and is ${Math.round(
+        ageInMinutes
+      )} minutes old.`;
+    } else {
+      message =
+        "Order is still fresh and was never attempted. No change made — student may still pay.";
+    }
+  } else if (orderStatus.status === "attempted") {
+    // Order was attempted but not fully paid — leave as PENDING
+    message =
+      "Order was attempted but not completed. Awaiting webhook or further payment attempt.";
+  }
+
+  return {
+    paymentId: payment.id,
+    previousStatus,
+    newStatus,
+    changed,
+    razorpayOrderStatus: orderStatus.status,
+    message,
+  };
 }
