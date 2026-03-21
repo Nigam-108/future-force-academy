@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { razorpay } from "@/server/lib/razorpay";
+import Razorpay from "razorpay";
 import { AppError } from "@/server/utils/errors";
 import { prisma } from "@/server/db/prisma";
 import {
@@ -7,38 +7,70 @@ import {
   findPurchaseByUserAndBatch,
 } from "@/server/repositories/payment.repository";
 
+// ─── Razorpay singleton ───────────────────────────────────────────────────────
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+const keyId = process.env.RAZORPAY_KEY_ID;
+const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
-type CreateOrderInput = {
-  userId: string;
-  batchId: string;
-};
+if (!keyId || !keySecret) {
+  throw new Error(
+    "RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be set in environment variables."
+  );
+}
 
-type VerifyPaymentInput = {
-  razorpayOrderId: string;
-  razorpayPaymentId: string;
-  razorpaySignature: string;
-  userId: string;
+declare global {
+  // eslint-disable-next-line no-var
+  var razorpayGlobal: Razorpay | undefined;
+}
+
+export const razorpay =
+  global.razorpayGlobal ??
+  new Razorpay({ key_id: keyId, key_secret: keySecret });
+
+if (process.env.NODE_ENV !== "production") {
+  global.razorpayGlobal = razorpay;
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type LocalPaymentStatus = "PENDING" | "SUCCESS" | "FAILED" | "REFUNDED";
+
+type RazorpayOrderParams =
+  | {
+      userId: string;
+      batchId: string;
+      purchaseType: "FULL_BATCH";
+      couponId?: string;
+      discountAmountPaise?: number;
+      originalAmountPaise?: number;
+      finalAmountPaise: number;
+    }
+  | {
+      userId: string;
+      batchId: string;
+      purchaseType: "INDIVIDUAL_TESTS";
+      testIds: string[];
+      finalAmountPaise: number;
+    };
+
+type OrderResult = {
+  orderId: string;
+  amount: number;
+  currency: string;
+  keyId: string | undefined;
+  paymentId: string;
+  batchTitle: string;
+  studentName: string;
+  studentEmail: string;
 };
 
 // ─── Order creation ───────────────────────────────────────────────────────────
 
-/**
- * Creates a Razorpay order for a student purchasing batch access.
- *
- * Flow:
- * 1. Validate student + batch
- * 2. Check not already enrolled
- * 3. Create a PENDING Payment record in DB
- * 4. Create Razorpay order
- * 5. Update Payment record with orderId
- * 6. Return order details to frontend
- */
-export async function createRazorpayOrder(input: CreateOrderInput) {
+export async function createRazorpayOrder(
+  input: RazorpayOrderParams
+): Promise<OrderResult> {
   const { userId, batchId } = input;
 
-  // Validate student
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, fullName: true, email: true, role: true },
@@ -49,83 +81,84 @@ export async function createRazorpayOrder(input: CreateOrderInput) {
     throw new AppError("Only students can purchase batch access", 400);
   }
 
-  // Validate batch
   const batch = await prisma.batch.findUnique({
     where: { id: batchId },
-    select: {
-      id: true,
-      title: true,
-      status: true,
-      isPaid: true,
-    },
+    select: { id: true, title: true, status: true, isPaid: true },
   });
 
   if (!batch) throw new AppError("Batch not found", 404);
-
   if (batch.status !== "ACTIVE") {
-    throw new AppError(
-      `Batch "${batch.title}" is not currently active`,
-      400
-    );
+    throw new AppError(`Batch "${batch.title}" is not currently active`, 400);
   }
-
   if (!batch.isPaid) {
     throw new AppError(
-      `Batch "${batch.title}" is free — no payment required. Contact admin for enrollment.`,
+      `Batch "${batch.title}" is free — no payment required`,
       400
     );
   }
 
-  // Check already enrolled
-  const existingPurchase = await findPurchaseByUserAndBatch(userId, batchId);
+  const amountInPaise = input.finalAmountPaise;
 
-  if (existingPurchase && existingPurchase.status === "ACTIVE") {
-    throw new AppError(
-      `You are already enrolled in "${batch.title}"`,
-      409
-    );
+  // Build payment create data based on purchaseType
+  const paymentCreateData =
+    input.purchaseType === "FULL_BATCH"
+      ? {
+          userId,
+          batchId,
+          amount: amountInPaise,
+          currency: "INR",
+          status: "PENDING" as LocalPaymentStatus,
+          gateway: "RAZORPAY" as const,
+          purchaseType: "FULL_BATCH" as const,
+          couponId: input.couponId ?? null,
+          discountAmount: input.discountAmountPaise ?? 0,
+          originalAmount: input.originalAmountPaise ?? amountInPaise,
+        }
+      : {
+          userId,
+          batchId,
+          amount: amountInPaise,
+          currency: "INR",
+          status: "PENDING" as LocalPaymentStatus,
+          gateway: "RAZORPAY" as const,
+          purchaseType: "INDIVIDUAL_TESTS" as const,
+          discountAmount: 0,
+          originalAmount: amountInPaise,
+        };
+
+  const payment = await prisma.payment.create({ data: paymentCreateData });
+
+  // Build Razorpay order notes
+  const orderNotes: Record<string, string> = {
+    userId,
+    batchId,
+    paymentId: payment.id,
+    purchaseType: input.purchaseType,
+    batchTitle: batch.title,
+    studentName: user.fullName,
+    studentEmail: user.email,
+  };
+
+  if (input.purchaseType === "INDIVIDUAL_TESTS") {
+    orderNotes.testIds = input.testIds.join(",");
   }
 
-  // Amount in paise (₹1 = 100 paise)
-  // TODO: Replace with actual batch price from DB when pricing model is added
-  // For now using a placeholder of ₹299
-  const amountInPaise = 29900;
-
-  // Create PENDING payment record in DB first
-  const payment = await prisma.payment.create({
-    data: {
-      userId,
-      batchId,
-      amount: amountInPaise,
-      currency: "INR",
-      status: "PENDING",
-      gateway: "RAZORPAY",
-    },
-  });
-
-  // Create Razorpay order
   let razorpayOrder;
   try {
     razorpayOrder = await razorpay.orders.create({
       amount: amountInPaise,
       currency: "INR",
       receipt: payment.id,
-      notes: {
-        userId,
-        batchId,
-        paymentId: payment.id,
-        batchTitle: batch.title,
-        studentName: user.fullName,
-        studentEmail: user.email,
-      },
+      notes: orderNotes,
     });
-  } catch (error) {
-    // Clean up pending payment if Razorpay order creation fails
+  } catch {
     await prisma.payment.delete({ where: { id: payment.id } });
-    throw new AppError("Failed to create payment order. Please try again.", 500);
+    throw new AppError(
+      "Failed to create payment order. Please try again.",
+      500
+    );
   }
 
-  // Update payment record with Razorpay order ID
   await prisma.payment.update({
     where: { id: payment.id },
     data: { orderId: razorpayOrder.id },
@@ -145,16 +178,13 @@ export async function createRazorpayOrder(input: CreateOrderInput) {
 
 // ─── Payment verification ─────────────────────────────────────────────────────
 
-/**
- * Verifies Razorpay payment signature after student completes payment.
- *
- * Flow:
- * 1. Verify HMAC signature (prevents tampered callbacks)
- * 2. Find Payment record by orderId
- * 3. Mark Payment as SUCCESS
- * 4. Create Purchase record (grants access)
- * 5. Return success
- */
+type VerifyPaymentInput = {
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
+  userId: string;
+};
+
 export async function verifyRazorpayPayment(input: VerifyPaymentInput) {
   const {
     razorpayOrderId,
@@ -165,7 +195,6 @@ export async function verifyRazorpayPayment(input: VerifyPaymentInput) {
 
   // Step 1 — Verify signature
   const webhookSecret = process.env.RAZORPAY_KEY_SECRET;
-
   if (!webhookSecret) {
     throw new AppError("Payment verification configuration missing", 500);
   }
@@ -176,37 +205,34 @@ export async function verifyRazorpayPayment(input: VerifyPaymentInput) {
     .digest("hex");
 
   if (expectedSignature !== razorpaySignature) {
-    throw new AppError("Payment verification failed — invalid signature", 400);
+    throw new AppError(
+      "Payment verification failed — invalid signature",
+      400
+    );
   }
 
   // Step 2 — Find payment record
   const payment = await prisma.payment.findFirst({
-    where: {
-      orderId: razorpayOrderId,
-      userId,
-    },
+    where: { orderId: razorpayOrderId, userId },
     select: {
       id: true,
       userId: true,
       batchId: true,
       status: true,
       amount: true,
+      purchaseType: true,
+      couponId: true,
+      discountAmount: true,
     },
   });
 
-  if (!payment) {
-    throw new AppError("Payment record not found", 404);
-  }
+  if (!payment) throw new AppError("Payment record not found", 404);
 
-  // Idempotency — already processed
   if (payment.status === "SUCCESS") {
-    return {
-      alreadyProcessed: true,
-      message: "Payment already verified",
-    };
+    return { alreadyProcessed: true, message: "Payment already verified" };
   }
 
-  // Step 3 — Mark payment as SUCCESS
+  // Step 3 — Mark SUCCESS
   await prisma.payment.update({
     where: { id: payment.id },
     data: {
@@ -216,27 +242,76 @@ export async function verifyRazorpayPayment(input: VerifyPaymentInput) {
     },
   });
 
-  // Step 4 — Create or reactivate Purchase
-  const existingPurchase = await findPurchaseByUserAndBatch(
-    payment.userId,
-    payment.batchId
-  );
+  // Step 4 — Grant access based on purchaseType
+  if (payment.purchaseType === "INDIVIDUAL_TESTS") {
+    // Get testIds from Razorpay order notes
+    try {
+      const order = await razorpay.orders.fetch(razorpayOrderId);
+      const notes = order.notes as Record<string, string> | null;
+      const testIdsString = notes?.testIds ?? "";
+      const testIds = testIdsString
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean);
 
-  if (existingPurchase) {
-    await prisma.purchase.update({
-      where: { id: existingPurchase.id },
-      data: {
-        status: "ACTIVE",
-        paymentId: payment.id,
-        validFrom: new Date(),
-      },
-    });
+      if (testIds.length > 0) {
+        const { createTestPurchasesAfterPayment } = await import(
+          "@/server/services/pricing.service"
+        );
+        await createTestPurchasesAfterPayment(
+          payment.userId,
+          payment.batchId,
+          testIds,
+          payment.id
+        );
+      }
+    } catch {
+      // Log but don't fail — payment is already marked SUCCESS
+      console.error(
+        "[verifyRazorpayPayment] Failed to create TestPurchase records"
+      );
+    }
   } else {
-    await createPurchaseRecord({
-      userId: payment.userId,
-      batchId: payment.batchId,
-      paymentId: payment.id,
-    });
+    // FULL_BATCH — create or reactivate Purchase
+    const existingPurchase = await findPurchaseByUserAndBatch(
+      payment.userId,
+      payment.batchId
+    );
+
+    if (existingPurchase) {
+      await prisma.purchase.update({
+        where: { id: existingPurchase.id },
+        data: {
+          status: "ACTIVE",
+          paymentId: payment.id,
+          purchaseType: "FULL_BATCH",
+          validFrom: new Date(),
+        },
+      });
+    } else {
+      await createPurchaseRecord({
+        userId: payment.userId,
+        batchId: payment.batchId,
+        paymentId: payment.id,
+      });
+    }
+
+    // Record coupon usage if applicable
+    if (payment.couponId && payment.discountAmount > 0) {
+      try {
+        const { recordCouponUsage } = await import(
+          "@/server/services/coupon.service"
+        );
+        await recordCouponUsage(
+          payment.couponId,
+          payment.userId,
+          payment.id,
+          payment.discountAmount
+        );
+      } catch {
+        console.error("[verifyRazorpayPayment] Failed to record coupon usage");
+      }
+    }
   }
 
   return {
@@ -247,18 +322,13 @@ export async function verifyRazorpayPayment(input: VerifyPaymentInput) {
   };
 }
 
-// ─── Webhook handler ──────────────────────────────────────────────────────────
+// ─── Webhook signature verification ──────────────────────────────────────────
 
-/**
- * Verifies Razorpay webhook signature.
- * Called by the webhook route before processing events.
- */
 export function verifyWebhookSignature(
   rawBody: string,
   signature: string
 ): boolean {
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
-
   if (!webhookSecret) return false;
 
   const expectedSignature = crypto
@@ -269,15 +339,9 @@ export function verifyWebhookSignature(
   return expectedSignature === signature;
 }
 
-/**
- * Processes Razorpay webhook events.
- *
- * Handles:
- * - payment.captured → mark SUCCESS + create Purchase
- * - payment.failed   → mark FAILED
- * - refund.created   → mark REFUNDED + cancel Purchase
- */
-export async function processWebhookEvent(event: {
+// ─── Webhook event processing ─────────────────────────────────────────────────
+
+type WebhookEvent = {
   event: string;
   payload: {
     payment?: {
@@ -295,13 +359,13 @@ export async function processWebhookEvent(event: {
       };
     };
   };
-}) {
+};
+
+export async function processWebhookEvent(event: WebhookEvent) {
   const eventType = event.event;
 
-  // ── payment.captured ──────────────────────────────────────────────────────
   if (eventType === "payment.captured") {
     const entity = event.payload.payment?.entity;
-
     if (!entity?.order_id || !entity?.id) return;
 
     const payment = await prisma.payment.findFirst({
@@ -320,6 +384,11 @@ export async function processWebhookEvent(event: {
       },
     });
 
+    if (payment.purchaseType === "INDIVIDUAL_TESTS") {
+      // Handled via verify endpoint — skip here
+      return;
+    }
+
     const existingPurchase = await findPurchaseByUserAndBatch(
       payment.userId,
       payment.batchId
@@ -328,11 +397,7 @@ export async function processWebhookEvent(event: {
     if (existingPurchase) {
       await prisma.purchase.update({
         where: { id: existingPurchase.id },
-        data: {
-          status: "ACTIVE",
-          paymentId: payment.id,
-          validFrom: new Date(),
-        },
+        data: { status: "ACTIVE", paymentId: payment.id },
       });
     } else {
       await createPurchaseRecord({
@@ -341,14 +406,11 @@ export async function processWebhookEvent(event: {
         paymentId: payment.id,
       });
     }
-
     return;
   }
 
-  // ── payment.failed ────────────────────────────────────────────────────────
   if (eventType === "payment.failed") {
     const entity = event.payload.payment?.entity;
-
     if (!entity?.order_id) return;
 
     const payment = await prisma.payment.findFirst({
@@ -365,14 +427,11 @@ export async function processWebhookEvent(event: {
         gatewayResponse: entity as object,
       },
     });
-
     return;
   }
 
-  // ── refund.created ────────────────────────────────────────────────────────
   if (eventType === "refund.created") {
     const paymentEntityId = event.payload.refund?.entity?.payment_id;
-
     if (!paymentEntityId) return;
 
     const payment = await prisma.payment.findFirst({
@@ -391,29 +450,27 @@ export async function processWebhookEvent(event: {
       payment.batchId
     );
 
-    if (existingPurchase && existingPurchase.paymentId === payment.id) {
+    if (
+      existingPurchase &&
+      existingPurchase.paymentId === payment.id
+    ) {
       await prisma.purchase.update({
         where: { id: existingPurchase.id },
         data: { status: "CANCELLED" },
       });
     }
-
     return;
   }
 }
 
-// ─── Order status fetch ───────────────────────────────────────────────────────
+// ─── Reconciliation ───────────────────────────────────────────────────────────
 
-/**
- * Fetches the current status of a Razorpay order directly from Razorpay.
- * Used for reconciliation when our DB status may be out of sync.
- */
 export async function fetchRazorpayOrderStatus(orderId: string) {
   try {
     const order = await razorpay.orders.fetch(orderId);
     return {
       orderId: order.id,
-      status: order.status,        // created | attempted | paid
+      status: order.status,
       amount: order.amount,
       currency: order.currency,
       attempts: order.attempts,
@@ -428,22 +485,6 @@ export async function fetchRazorpayOrderStatus(orderId: string) {
   }
 }
 
-// ─── Reconciliation ───────────────────────────────────────────────────────────
-
-/**
- * Reconciles a payment record with Razorpay's actual state.
- *
- * Use when:
- * - A payment is stuck in PENDING after 30+ minutes
- * - Webhook was missed or failed to deliver
- * - Admin wants to manually verify and fix a payment
- *
- * Flow:
- * 1. Fetch order status from Razorpay
- * 2. If Razorpay says "paid" → mark our DB as SUCCESS + create Purchase
- * 3. If Razorpay says "created" + old → mark as FAILED (stale)
- * 4. Return what changed
- */
 export async function reconcilePayment(paymentId: string) {
   const payment = await prisma.payment.findUnique({
     where: { id: paymentId },
@@ -459,9 +500,7 @@ export async function reconcilePayment(paymentId: string) {
     },
   });
 
-  if (!payment) {
-    throw new AppError("Payment not found", 404);
-  }
+  if (!payment) throw new AppError("Payment not found", 404);
 
   if (payment.gateway !== "RAZORPAY") {
     throw new AppError(
@@ -477,21 +516,21 @@ export async function reconcilePayment(paymentId: string) {
     );
   }
 
-  if (payment.status === "SUCCESS" || payment.status === "REFUNDED") {
+  if (
+    payment.status === "SUCCESS" ||
+    payment.status === "REFUNDED"
+  ) {
     return {
       paymentId: payment.id,
-      previousStatus: payment.status,
-      newStatus: payment.status,
+      previousStatus: payment.status as LocalPaymentStatus,
+      newStatus: payment.status as LocalPaymentStatus,
       changed: false,
       message: `Payment is already ${payment.status} — no reconciliation needed`,
     };
   }
 
-  // Fetch from Razorpay
   const orderStatus = await fetchRazorpayOrderStatus(payment.orderId);
 
-  // FIX — explicitly type as full union to prevent narrowing error
-  type LocalPaymentStatus = "PENDING" | "SUCCESS" | "FAILED" | "REFUNDED";
   const previousStatus: LocalPaymentStatus =
     payment.status as LocalPaymentStatus;
   let newStatus: LocalPaymentStatus = previousStatus;
@@ -499,13 +538,13 @@ export async function reconcilePayment(paymentId: string) {
   let message = "";
 
   if (orderStatus.status === "paid") {
-    // Razorpay says paid — mark SUCCESS + create Purchase
     await prisma.payment.update({
       where: { id: payment.id },
       data: {
         status: "SUCCESS",
         paidAt: new Date(),
-        notes: "Status reconciled from Razorpay — order marked as paid",
+        notes:
+          "Status reconciled from Razorpay — order marked as paid",
       },
     });
 
@@ -532,7 +571,6 @@ export async function reconcilePayment(paymentId: string) {
     message =
       "Payment reconciled — Razorpay order is paid. Status updated to SUCCESS and batch access granted.";
   } else if (orderStatus.status === "created") {
-    // Order was never attempted — check if it's stale (> 30 minutes old)
     const ageInMinutes =
       (Date.now() - new Date(payment.createdAt).getTime()) / 60000;
 
@@ -557,7 +595,6 @@ export async function reconcilePayment(paymentId: string) {
         "Order is still fresh and was never attempted. No change made — student may still pay.";
     }
   } else if (orderStatus.status === "attempted") {
-    // Order was attempted but not fully paid — leave as PENDING
     message =
       "Order was attempted but not completed. Awaiting webhook or further payment attempt.";
   }

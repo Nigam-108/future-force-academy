@@ -96,6 +96,8 @@ model User {
   studentBatches StudentBatch[] @relation("StudentBatchMembership")
   payments  Payment[]
   purchases Purchase[]
+  couponUsages  CouponUsage[]
+  testPurchases TestPurchase[]
 }
 
 model Question {
@@ -143,6 +145,7 @@ model Test {
   testQuestions TestQuestion[]
   attempts      TestAttempt[]
   testBatches   TestBatch[]
+  testPurchases TestPurchase[]
 }
 
 model TestSection {
@@ -251,6 +254,11 @@ model Batch {
   startDate   DateTime?
   endDate     DateTime?
   isPaid      Boolean     @default(false)
+  price         Int?
+  originalPrice Int?
+  offerEndDate  DateTime?
+  coupons       Coupon[]
+  testPurchases TestPurchase[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -290,6 +298,7 @@ model TestBatch {
   testId     String
   batchId    String
   assignedAt DateTime @default(now())
+  price Int?
 
   test  Test  @relation(fields: [testId], references: [id], onDelete: Cascade)
   batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
@@ -317,6 +326,16 @@ enum PurchaseStatus {
   CANCELLED
 }
 
+enum PurchaseType {
+  FULL_BATCH
+  INDIVIDUAL_TESTS
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FLAT
+}
+
 /// Records a payment transaction attempt.
 ///
 /// One payment = one checkout attempt.
@@ -336,12 +355,21 @@ model Payment {
   gatewayResponse Json?
   notes           String?
   paidAt          DateTime?
+  couponId       String?
+  discountAmount Int          @default(0)
+  originalAmount Int?
+  purchaseType   PurchaseType @default(FULL_BATCH)
+
+  coupon         Coupon?       @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  couponUsage    CouponUsage?
+  testPurchases  TestPurchase[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   batch     Batch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
   purchases Purchase[]
+
 }
 
 /// Records confirmed access granted to a student for a batch.
@@ -358,6 +386,7 @@ model Purchase {
   status     PurchaseStatus @default(ACTIVE)
   validFrom  DateTime       @default(now())
   validUntil DateTime?
+  purchaseType PurchaseType @default(FULL_BATCH)
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
 
@@ -366,4 +395,62 @@ model Purchase {
   payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 
   @@unique([userId, batchId])
+}
+
+/// Admin-created discount coupon.
+/// Can be batch-specific or global (applies to any batch).
+/// Supports PERCENTAGE and FLAT discount types.
+model Coupon {
+  id              String       @id @default(cuid())
+  code            String       @unique
+  description     String?
+  discountType    DiscountType
+  discountValue   Int
+  maxUsageLimit   Int?
+  perStudentLimit Int          @default(1)
+  batchId         String?
+  expiresAt       DateTime?
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  batch    Batch?        @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  usages   CouponUsage[]
+  payments Payment[]
+}
+
+/// Tracks each coupon application — one record per payment that used a coupon.
+model CouponUsage {
+  id              String   @id @default(cuid())
+  couponId        String
+  userId          String
+  paymentId       String   @unique
+  discountApplied Int
+  createdAt       DateTime @default(now())
+
+  coupon  Coupon  @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+}
+
+/// Tracks individual test access granted via a paid purchase.
+///
+/// Created when a student buys specific tests from a batch (not full batch).
+/// One record per test purchased — unique per (userId, testId).
+model TestPurchase {
+  id        String         @id @default(cuid())
+  userId    String
+  testId    String
+  batchId   String
+  paymentId String?
+  status    PurchaseStatus @default(ACTIVE)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  test    Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  batch   Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, testId])
 }
