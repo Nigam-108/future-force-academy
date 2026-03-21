@@ -22,6 +22,12 @@ import { prisma } from "@/server/db/prisma";
  * Now includes both StudentBatch and Purchase data
  * so the service can enforce access via either path.
  */
+/**
+ * Fetches a test before starting an attempt.
+ *
+ * Only returns batch ID and status — the full access check
+ * is delegated to access.service.ts / studentHasTestAccess().
+ */
 export async function findTestForAttemptStart(testId: string) {
   return prisma.test.findUnique({
     where: { id: testId },
@@ -42,19 +48,11 @@ export async function findTestForAttemptStart(testId: string) {
       },
       testBatches: {
         select: {
+          batchId: true,
           batch: {
             select: {
               id: true,
               status: true,
-              // Path 1: admin manual assignment
-              studentBatches: {
-                select: { studentId: true },
-              },
-              // Path 2: purchase / enrollment
-              purchases: {
-                where: { status: "ACTIVE" },
-                select: { userId: true },
-              },
             },
           },
         },

@@ -4,7 +4,7 @@ import { ok, fail } from "@/server/utils/api-response";
 import { AppError } from "@/server/utils/errors";
 import { prisma } from "@/server/db/prisma";
 import { TestMode, TestVisibilityStatus } from "@prisma/client";
-import { studentHasBatchAccess } from "@/server/services/access.service";
+import { studentHasTestAccess } from "@/server/services/access.service";
 
 function deriveStudentTestStatus(test: {
   mode: TestMode;
@@ -71,9 +71,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       throw new AppError("Test is not available", 403);
     }
 
-    // Batch-access check using central resolver
+    // Batch-access check — delegates to access.service.ts
     if (test.testBatches.length > 0) {
-      // Check all active batches this test is linked to
       const activeBatches = test.testBatches.filter(
         (tb) => tb.batch.status === "ACTIVE"
       );
@@ -85,14 +84,14 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         );
       }
 
-      // Check if student has access to at least one active batch
-      const accessChecks = await Promise.all(
-        activeBatches.map((tb) =>
-          studentHasBatchAccess(session.userId, tb.batchId)
-        )
+      const hasAccess = await studentHasTestAccess(
+        session.userId,
+        testId,
+        test.testBatches.map((tb) => ({
+          batchId: tb.batchId,
+          batch: { id: tb.batch.id, status: tb.batch.status },
+        }))
       );
-
-      const hasAccess = accessChecks.some(Boolean);
 
       if (!hasAccess) {
         throw new AppError(
@@ -104,14 +103,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
     const studentStatus = deriveStudentTestStatus(test);
 
-    // Remove internal batch data from student response
+    // Strip internal batch data from student-facing response
     const { testBatches: _testBatches, ...testData } = test;
 
-    return ok(
-      "Test fetched successfully",
-      { ...testData, studentStatus },
-      200
-    );
+    return ok("Test fetched successfully", { ...testData, studentStatus }, 200);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to fetch test";

@@ -186,6 +186,17 @@ export async function listTestRecords(filters: {
  *   a) StudentBatch record (admin assigned)
  *   b) Active Purchase record (paid/enrolled)
  */
+/**
+ * Batch-aware student test listing.
+ *
+ * A student sees a test if ANY of these 5 conditions are true:
+ *   1. Test has no batch links (global)
+ *   2. Student has full batch access via StudentBatch
+ *   3. Student has full batch access via FULL_BATCH Purchase
+ *   4. Student has a TestPurchase for this specific test
+ *   5. Test is free (price=null/0) in a batch where student has
+ *      individual TestPurchase records
+ */
 export async function listStudentVisibleTestRecords(filters: {
   page: number;
   limit: number;
@@ -195,9 +206,10 @@ export async function listStudentVisibleTestRecords(filters: {
 }) {
   const batchAccessFilter: Prisma.TestWhereInput = {
     OR: [
-      // Global test — no batch restrictions
+      // 1. Global test — no batch restrictions
       { testBatches: { none: {} } },
-      // Batch-restricted — student has access via StudentBatch
+
+      // 2. Full batch access via StudentBatch (admin assigned)
       {
         testBatches: {
           some: {
@@ -209,7 +221,8 @@ export async function listStudentVisibleTestRecords(filters: {
           },
         },
       },
-      // Batch-restricted — student has access via active Purchase
+
+      // 3. Full batch access via FULL_BATCH Purchase
       {
         testBatches: {
           some: {
@@ -218,9 +231,43 @@ export async function listStudentVisibleTestRecords(filters: {
                 some: {
                   userId: filters.userId,
                   status: "ACTIVE",
+                  purchaseType: "FULL_BATCH",
                 },
               },
             },
+          },
+        },
+      },
+
+      // 4. Individual test purchase (TestPurchase record for this test)
+      {
+        testPurchases: {
+          some: {
+            userId: filters.userId,
+            status: "ACTIVE",
+          },
+        },
+      },
+
+      // 5. Free test (price=null/0 in TestBatch) in a batch where student
+      //    has any individual TestPurchase (gives access to free tests
+      //    alongside paid tests they bought)
+      {
+        testBatches: {
+          some: {
+            AND: [
+              { OR: [{ price: null }, { price: 0 }] },
+              {
+                batch: {
+                  testPurchases: {
+                    some: {
+                      userId: filters.userId,
+                      status: "ACTIVE",
+                    },
+                  },
+                },
+              },
+            ],
           },
         },
       },

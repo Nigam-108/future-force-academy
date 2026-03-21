@@ -1,6 +1,8 @@
 import { AttemptStatus, TestMode, TestVisibilityStatus } from "@prisma/client";
+import {
+  studentHasTestAccess,
+} from "@/server/services/access.service";
 import { AppError } from "@/server/utils/errors";
-// REPLACE the existing import block
 import {
   checkStudentBatchAccessToTest,
   createAttemptWithAnswerPlaceholders,
@@ -82,40 +84,18 @@ export async function startAttempt(input: StartAttemptInput, userId: string) {
 
   assertTestAvailableForStudentStart(test);
 
-  // ── Batch access guard ──────────────────────────────────────────────────
-  // Rules:
-  // - No batches linked = global test, all students can start
-  // - Batches linked = student must be in at least one ACTIVE batch
-  // - CLOSED batch = student cannot start new attempt via that batch
-  // - Batches linked = student must have access via EITHER:
-  //   a) StudentBatch record (admin assigned) + batch is ACTIVE
-  //   b) Active Purchase record (paid/enrolled) + batch is ACTIVE
+  // ── Batch access guard ──────────────────────────────────────────────────────
+  // Delegates to access.service.ts which checks all 5 access conditions:
+  // StudentBatch, FULL_BATCH Purchase, TestPurchase, free test with purchase
   if (test.testBatches.length > 0) {
-    const hasActiveAccess = test.testBatches.some((tb) => {
-      // Batch must be ACTIVE for access to work
-      if (tb.batch.status !== "ACTIVE") return false;
+    const batchLinks = test.testBatches.map((tb) => ({
+      batchId: tb.batchId,
+      batch: { id: tb.batch.id, status: tb.batch.status },
+    }));
 
-      // Path 1: admin manually assigned student to batch
-      const viaStudentBatch = tb.batch.studentBatches.some(
-        (sb) => sb.studentId === userId
-      );
+    const hasAccess = await studentHasTestAccess(userId, test.id, batchLinks);
 
-      // Path 2: student has an active purchase for this batch
-      const viaPurchase = tb.batch.purchases.some(
-        (p) => p.userId === userId
-      );
-
-      return viaStudentBatch || viaPurchase;
-    });
-
-    if (!hasActiveAccess) {
-      // Give more specific error based on what's wrong
-      const isInAnyBatch = test.testBatches.some(
-        (tb) =>
-          tb.batch.studentBatches.some((sb) => sb.studentId === userId) ||
-          tb.batch.purchases.some((p) => p.userId === userId)
-      );
-
+    if (!hasAccess) {
       const allBatchesClosed = test.testBatches.every(
         (tb) => tb.batch.status !== "ACTIVE"
       );
@@ -127,20 +107,13 @@ export async function startAttempt(input: StartAttemptInput, userId: string) {
         );
       }
 
-      if (isInAnyBatch) {
-        throw new AppError(
-          "Your batch enrollment for this test has ended. Please contact your admin.",
-          403
-        );
-      }
-
       throw new AppError(
         "You do not have access to this test. Please purchase or contact your admin.",
         403
       );
     }
   }
-  // ── End batch access guard ──────────────────────────────────────────────
+  // ── End batch access guard ──────────────────────────────────────────────────
   
   if (test.testQuestions.length === 0) {
     throw new AppError("This test has no assigned questions yet", 400);
