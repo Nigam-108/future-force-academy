@@ -96,12 +96,42 @@ function buildPageHref(
 function TestListCard({ test }: { test: StudentTestItem }) {
   const actualQuestionCount = test._count?.testQuestions ?? test.totalQuestions;
   const sectionCount = test.sections?.length ?? 0;
+  const primaryBatch = test.testBatches?.[0];
+  const batchColor = primaryBatch?.batch.color ?? null;
 
   return (
-    <article className="rounded-3xl border bg-white p-5 shadow-sm">
+    <article
+      className="rounded-3xl border bg-white p-5 shadow-sm overflow-hidden"
+      style={
+        batchColor
+          ? { borderLeft: `4px solid ${batchColor}` }
+          : { borderLeft: "4px solid #10b981" }
+      }
+    >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-2">
           <div className="flex flex-wrap gap-2 text-xs font-medium">
+            {/* Batch indicator */}
+            {primaryBatch ? (
+              <span
+                className="rounded-full border px-2.5 py-1 font-semibold"
+                style={{
+                  backgroundColor: `${batchColor}15`,
+                  color: batchColor ?? "#6366f1",
+                  borderColor: `${batchColor}30`,
+                }}
+              >
+                {primaryBatch.batch.title}
+                {(test.testBatches?.length ?? 0) > 1
+                  ? ` +${(test.testBatches?.length ?? 1) - 1}`
+                  : ""}
+              </span>
+            ) : (
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700">
+                Global
+              </span>
+            )}
+
             <span
               className={`rounded-full px-3 py-1 ring-1 ${getModeBadgeClasses(
                 test.mode

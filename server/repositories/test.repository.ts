@@ -39,6 +39,7 @@ const testInclude = {
           examType: true,
           status: true,
           isPaid: true,
+          color: true,
         },
       },
     },
@@ -62,7 +63,22 @@ const studentTestInclude = {
       testBatches: true,
     },
   },
+  testBatches: {
+    select: {
+      batchId: true,
+      batch: {
+        select: {
+          id: true,
+          title: true,
+          color: true,
+        },
+      },
+    },
+    orderBy: { assignedAt: "asc" as const },
+    take: 3,
+  },
 };
+
 
 export async function findTestBySlug(slug: string) {
   return prisma.test.findUnique({

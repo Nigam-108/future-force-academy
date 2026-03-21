@@ -22,6 +22,7 @@ export type BatchFormInitialValues = {
   startDate: string | null;
   endDate: string | null;
   isPaid: boolean;
+  color?: string;
 };
 
 type BatchFormProps = {
@@ -69,8 +70,10 @@ export function BatchForm({
   );
   const [startDate, setStartDate] = useState(toDateInput(initialValues?.startDate));
   const [endDate, setEndDate] = useState(toDateInput(initialValues?.endDate));
-  const [isPaid, setIsPaid] = useState(initialValues?.isPaid ?? false);
-
+   const [isPaid, setIsPaid] = useState(initialValues?.isPaid ?? false);
+  const [color, setColor] = useState(
+    initialValues?.color ?? "#6366f1"
+  );
   const [slugTouched, setSlugTouched] = useState(Boolean(initialValues?.slug));
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -89,7 +92,8 @@ export function BatchForm({
     setStatus("DRAFT");
     setStartDate("");
     setEndDate("");
-    setIsPaid(false);
+     setIsPaid(false);
+    setColor("#6366f1");
     setSlugTouched(false);
   }
 
@@ -110,6 +114,7 @@ export function BatchForm({
         startDate: startDate ? new Date(startDate).toISOString() : undefined,
         endDate: endDate ? new Date(endDate).toISOString() : undefined,
         isPaid,
+        color,
       };
 
       const url =
@@ -254,7 +259,7 @@ export function BatchForm({
           />
         </div>
 
-        <label className="flex items-center gap-3 rounded-2xl border px-4 py-3 md:col-span-2">
+         <label className="flex items-center gap-3 rounded-2xl border px-4 py-3 md:col-span-2">
           <input
             type="checkbox"
             checked={isPaid}
@@ -264,6 +269,84 @@ export function BatchForm({
             This is a paid batch
           </span>
         </label>
+
+        {/* ── Batch Color Picker ── */}
+        <div className="space-y-3 md:col-span-2">
+          <label className="text-sm font-semibold text-slate-800">
+            Batch Color
+          </label>
+          <p className="text-xs text-slate-500">
+            This color appears on test cards and the student dashboard to visually identify this batch.
+          </p>
+
+          {/* Preset swatches */}
+          <div className="flex flex-wrap gap-2">
+            {[
+              "#6366f1", // Indigo
+              "#3b82f6", // Blue
+              "#8b5cf6", // Violet
+              "#ec4899", // Pink
+              "#f97316", // Orange
+              "#10b981", // Emerald
+              "#06b6d4", // Cyan
+              "#f59e0b", // Amber
+              "#ef4444", // Red
+              "#64748b", // Slate
+            ].map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setColor(preset)}
+                className={`h-8 w-8 rounded-xl border-2 transition-transform hover:scale-110 ${
+                  color === preset
+                    ? "border-slate-900 scale-110 shadow-md"
+                    : "border-transparent"
+                }`}
+                style={{ backgroundColor: preset }}
+                title={preset}
+              />
+            ))}
+
+            {/* Custom color input */}
+            <label
+              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-slate-300 text-xs text-slate-400 hover:border-slate-500 transition-colors overflow-hidden"
+              title="Custom color"
+            >
+              <input
+                type="color"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                className="h-full w-full cursor-pointer opacity-0 absolute"
+              />
+              <span className="pointer-events-none">+</span>
+            </label>
+          </div>
+
+          {/* Preview */}
+          <div className="flex items-center gap-3">
+            <div
+              className="h-10 w-10 rounded-xl shadow-sm"
+              style={{ backgroundColor: color }}
+            />
+            <div
+              className="flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold"
+              style={{
+                borderLeft: `4px solid ${color}`,
+                backgroundColor: `${color}12`,
+                color: color,
+              }}
+            >
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: color }}
+              />
+              Batch preview
+            </div>
+            <code className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
+              {color}
+            </code>
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3">

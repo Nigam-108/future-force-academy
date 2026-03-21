@@ -1,7 +1,9 @@
 import {
   Activity,
   BarChart2,
+  Bookmark,
   BookOpen,
+  Calendar,
   CreditCard,
   FileText,
   Home,
@@ -11,6 +13,7 @@ import {
   Settings,
   Shield,
   Tag,
+  User,
   Users,
   FolderOpen,
 } from "lucide-react";
@@ -30,6 +33,41 @@ export const studentNavItems = [
   { label: "Purchases", href: "/student/purchases", icon: CreditCard },
   { label: "Saved", href: "/student/saved", icon: BookOpen },
   { label: "Profile", href: "/student/profile", icon: Settings },
+];
+
+export type StudentNavGroup = {
+  groupLabel: string;
+  items: Array<{
+    label: string;
+    href: string;
+    icon: React.ComponentType<{ size?: number; className?: string }>;
+  }>;
+};
+
+export const studentNavGroups: StudentNavGroup[] = [
+  {
+    groupLabel: "Main",
+    items: [
+      { label: "Dashboard", href: "/student/dashboard", icon: Home },
+    ],
+  },
+  {
+    groupLabel: "Learning",
+    items: [
+      { label: "Tests", href: "/student/tests", icon: LayoutGrid },
+      { label: "Results", href: "/student/results", icon: FileText },
+      { label: "Upcoming", href: "/student/upcoming-tests", icon: Calendar },
+    ],
+  },
+  {
+    groupLabel: "My Account",
+    items: [
+      { label: "Enrollments", href: "/student/purchases", icon: Layers },
+      { label: "Payments", href: "/student/payments", icon: CreditCard },
+      { label: "Saved", href: "/student/saved", icon: Bookmark },
+      { label: "Profile", href: "/student/profile", icon: User },
+    ],
+  },
 ];
 
 // ─── Admin navigation — grouped by domain ────────────────────────────────────

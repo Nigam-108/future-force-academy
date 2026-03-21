@@ -32,6 +32,7 @@ type TestBatchItem = {
     examType: string;
     status: string;
     isPaid: boolean;
+    color: string;
   };
 };
 
@@ -155,11 +156,44 @@ function badgeClass(
  * Returns card border + accent color based on what batches a test is linked to.
  * If multiple exam types are linked, uses a mixed/multi color.
  */
-function getBatchColorScheme(testBatches: TestBatchItem[]): {
-  border: string;
-  badge: string;
-  dot: string;
+function getBatchStyle(testBatches: TestBatchItem[]): {
+  borderColor: string;
+  badgeStyle: React.CSSProperties;
+  dotColor: string;
   label: string;
+  isGlobal: boolean;
+} {
+  if (testBatches.length === 0) {
+    return {
+      borderColor: "#10b981",
+      badgeStyle: {
+        backgroundColor: "#10b98115",
+        color: "#059669",
+        borderColor: "#10b98130",
+      },
+      dotColor: "#10b981",
+      label: "Global",
+      isGlobal: true,
+    };
+  }
+
+  const primaryColor = testBatches[0].batch.color ?? "#6366f1";
+  const label =
+    testBatches.length === 1
+      ? testBatches[0].batch.title
+      : `${testBatches.length} batches`;
+
+  return {
+    borderColor: primaryColor,
+    badgeStyle: {
+      backgroundColor: `${primaryColor}15`,
+      color: primaryColor,
+      borderColor: `${primaryColor}35`,
+    },
+    dotColor: primaryColor,
+    label,
+    isGlobal: false,
+  };
 } {
   if (testBatches.length === 0) {
     return {
@@ -226,11 +260,12 @@ function getBatchColorScheme(testBatches: TestBatchItem[]): {
 // ─── TestCard component ─────────────────────────────────────────────────────
 
 function TestCard({ test }: { test: AdminTestItem }) {
-  const colorScheme = getBatchColorScheme(test.testBatches);
+  const batchStyle = getBatchStyle(test.testBatches);
 
   return (
     <div
-      className={`rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden ${colorScheme.border}`}
+      className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+      style={{ borderLeft: `4px solid ${batchStyle.borderColor}` }}
     >
       <div className="p-5">
         {/* Top row: badges + title + actions */}
@@ -241,14 +276,18 @@ function TestCard({ test }: { test: AdminTestItem }) {
             <div className="flex flex-wrap gap-1.5 text-xs">
               {/* Batch color badge */}
               <span
-                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${colorScheme.badge}`}
+                className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold"
+                style={batchStyle.badgeStyle}
               >
-                {test.testBatches.length === 0 ? (
+                {batchStyle.isGlobal ? (
                   <Globe size={11} />
                 ) : (
-                  <span className={`h-1.5 w-1.5 rounded-full ${colorScheme.dot}`} />
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ backgroundColor: batchStyle.dotColor }}
+                  />
                 )}
-                {colorScheme.label}
+                {batchStyle.label}
               </span>
 
               <span className={`rounded-full px-2.5 py-1 ring-1 ${badgeClass(test.mode)}`}>
@@ -273,7 +312,12 @@ function TestCard({ test }: { test: AdminTestItem }) {
                   <Link
                     key={tb.id}
                     href={`/admin/tests?batchId=${tb.batch.id}`}
-                    className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition-colors"
+                    className="rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-opacity hover:opacity-80"
+                    style={{
+                      backgroundColor: `${tb.batch.color}15`,
+                      color: tb.batch.color,
+                      borderColor: `${tb.batch.color}30`,
+                    }}
                     title={`Filter tests in ${tb.batch.title}`}
                   >
                     {tb.batch.title}

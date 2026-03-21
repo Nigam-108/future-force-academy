@@ -7,6 +7,7 @@ const batchSelect = {
   examType: true,
   status: true,
   isPaid: true,
+  color: true,
 } as const;
 
 /**

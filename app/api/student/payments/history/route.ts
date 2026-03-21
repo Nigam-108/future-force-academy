@@ -47,6 +47,7 @@ export async function GET() {
             title: true,
             examType: true,
             isPaid: true,
+            color: true,
           },
         },
       },

@@ -123,10 +123,17 @@ export type StudentTestItem = {
   _count?: {
     testQuestions: number;
   };
+  testBatches?: Array<{
+    batchId: string;
+    batch: {
+      id: string;
+      title: string;
+      color: string;
+    };
+  }>;
   studentStatus: StudentTestStatus;
   isGlobal: boolean;
 };
-
 export type StudentTestDetailItem = StudentTestItem;
 
 type StudentTestsResponse = {

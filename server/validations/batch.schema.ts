@@ -33,6 +33,10 @@ const batchBaseSchema = z.object({
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
   isPaid: z.boolean().default(false),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color")
+    .default("#6366f1"),
 });
 
 function validateDateRange(

@@ -32,6 +32,7 @@ export async function GET() {
             examType: true,
             isPaid: true,
             status: true,
+            color: true,
             // Include linked LIVE tests
             testBatches: {
               select: {
@@ -83,6 +84,7 @@ export async function GET() {
         examType: purchase.batch.examType,
         isPaid: purchase.batch.isPaid,
         status: purchase.batch.status,
+        color: purchase.batch.color,
       },
       // Only show LIVE tests to students
       linkedTests: purchase.batch.testBatches

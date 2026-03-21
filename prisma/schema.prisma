@@ -254,6 +254,7 @@ model Batch {
   startDate   DateTime?
   endDate     DateTime?
   isPaid      Boolean     @default(false)
+  color       String      @default("#6366f1")
   price         Int?
   originalPrice Int?
   offerEndDate  DateTime?

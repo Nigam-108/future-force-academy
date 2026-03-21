@@ -40,6 +40,7 @@ export async function createBatchRecord(
       startDate: data.startDate ? new Date(data.startDate) : undefined,
       endDate: data.endDate ? new Date(data.endDate) : undefined,
       isPaid: data.isPaid,
+      color: data.color ?? "#6366f1",
       createdById: data.createdById,
     },
     include: batchInclude,
@@ -61,6 +62,7 @@ export async function updateBatchRecord(id: string, data: UpdateBatchInput) {
       startDate: data.startDate ? new Date(data.startDate) : null,
       endDate: data.endDate ? new Date(data.endDate) : null,
       isPaid: data.isPaid,
+      ...(data.color ? { color: data.color } : {}),
     },
     include: batchInclude,
   });

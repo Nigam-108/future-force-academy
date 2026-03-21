@@ -21,6 +21,7 @@ type PaymentHistoryItem = {
     title: string;
     examType: string;
     isPaid: boolean;
+    color: true,
   };
 };
 
@@ -150,9 +151,10 @@ export default async function StudentPaymentsPage() {
           <div className="space-y-4">
             {payments.map((payment) => (
               <div
-                key={payment.id}
-                className="rounded-3xl border bg-white p-5 shadow-sm"
-              >
+            key={payment.id}
+            className="rounded-3xl border bg-white p-5 shadow-sm overflow-hidden"
+            style={{ borderLeft: `4px solid ${payment.batch.color ?? "#6366f1"}` }}
+          >
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="space-y-1">
                     <div className="flex flex-wrap gap-2">
@@ -172,10 +174,15 @@ export default async function StudentPaymentsPage() {
                       {payment.amountFormatted}
                     </p>
 
-                    <p className="text-sm font-medium text-slate-700">
-                      {payment.batch.title}
-                    </p>
-
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="h-2.5 w-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: payment.batch.color ?? "#6366f1" }}
+                      />
+                      <p className="text-sm font-medium text-slate-700">
+                        {payment.batch.title}
+                      </p>
+                    </div>
                     <p className="text-xs text-slate-500">
                       {statusDescription(payment.status)}
                     </p>
