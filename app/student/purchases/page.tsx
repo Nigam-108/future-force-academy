@@ -39,7 +39,7 @@ type PurchaseItem = {
     examType: string;
     isPaid: boolean;
     status: string;
-    color: true,
+    color: string,
   };
   payment: {
     id: string;

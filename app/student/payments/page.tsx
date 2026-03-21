@@ -21,7 +21,7 @@ type PaymentHistoryItem = {
     title: string;
     examType: string;
     isPaid: boolean;
-    color: true,
+    color: string,
   };
 };
 

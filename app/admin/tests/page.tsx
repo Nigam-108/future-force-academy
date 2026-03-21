@@ -195,66 +195,7 @@ function getBatchStyle(testBatches: TestBatchItem[]): {
     isGlobal: false,
   };
 } {
-  if (testBatches.length === 0) {
-    return {
-      border: "border-l-4 border-l-emerald-400",
-      badge: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-      dot: "bg-emerald-400",
-      label: "Global",
-    };
-  }
-
-  const examTypes = [...new Set(testBatches.map((tb) => tb.batch.examType))];
-
-  // Multiple different exam types
-  if (examTypes.length > 1) {
-    return {
-      border: "border-l-4 border-l-pink-400",
-      badge: "bg-pink-50 text-pink-700 ring-pink-200",
-      dot: "bg-pink-400",
-      label: `${testBatches.length} batches`,
-    };
-  }
-
-  const examType = examTypes[0];
-
-  switch (examType) {
-    case "GPSC":
-      return {
-        border: "border-l-4 border-l-blue-400",
-        badge: "bg-blue-50 text-blue-700 ring-blue-200",
-        dot: "bg-blue-400",
-        label: `GPSC · ${testBatches.length} batch${testBatches.length !== 1 ? "es" : ""}`,
-      };
-    case "UPSC":
-      return {
-        border: "border-l-4 border-l-purple-400",
-        badge: "bg-purple-50 text-purple-700 ring-purple-200",
-        dot: "bg-purple-400",
-        label: `UPSC · ${testBatches.length} batch${testBatches.length !== 1 ? "es" : ""}`,
-      };
-    case "WPSI":
-      return {
-        border: "border-l-4 border-l-orange-400",
-        badge: "bg-orange-50 text-orange-700 ring-orange-200",
-        dot: "bg-orange-400",
-        label: `WPSI · ${testBatches.length} batch${testBatches.length !== 1 ? "es" : ""}`,
-      };
-    case "TECHNICAL_OPERATOR":
-      return {
-        border: "border-l-4 border-l-cyan-400",
-        badge: "bg-cyan-50 text-cyan-700 ring-cyan-200",
-        dot: "bg-cyan-400",
-        label: `Tech · ${testBatches.length} batch${testBatches.length !== 1 ? "es" : ""}`,
-      };
-    default:
-      return {
-        border: "border-l-4 border-l-slate-400",
-        badge: "bg-slate-100 text-slate-600 ring-slate-200",
-        dot: "bg-slate-400",
-        label: `${testBatches.length} batch${testBatches.length !== 1 ? "es" : ""}`,
-      };
-  }
+  
 }
 
 // ─── TestCard component ─────────────────────────────────────────────────────
