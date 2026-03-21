@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { safeJson } from "@/lib/safe-fetch";
 
 type Props = {
   paymentId: string;
@@ -46,13 +47,16 @@ export function ReconcilePaymentButton({
     try {
       const response = await fetch(
         `/api/admin/payments/${paymentId}/reconcile`,
-        { method: "POST" }
+        {
+          method: "POST",
+          headers: { Accept: "application/json" },
+        }
       );
 
-      const json = (await response.json()) as ReconcileResult;
-      setResult(json);
+      const json = await safeJson<ReconcileResult["data"]>(response);
+      setResult(json as ReconcileResult);
 
-      if (json.data?.changed) {
+      if ((json as ReconcileResult).data?.changed) {
         router.refresh();
       }
     } catch {
@@ -65,7 +69,6 @@ export function ReconcilePaymentButton({
     }
   }
 
-  // ── Compact mode — for inline table rows ──────────────────────────────────
   if (compact) {
     return (
       <div className="flex flex-col items-end gap-1">
@@ -94,7 +97,6 @@ export function ReconcilePaymentButton({
     );
   }
 
-  // ── Full mode — for detail page ───────────────────────────────────────────
   return (
     <div className="space-y-3">
       <button
@@ -128,7 +130,7 @@ export function ReconcilePaymentButton({
                 </p>
               ) : (
                 <p className="mt-1 text-xs">
-                  Razorpay order status: {result.data.razorpayOrderStatus}
+                  Razorpay: {result.data.razorpayOrderStatus}
                 </p>
               )}
             </>

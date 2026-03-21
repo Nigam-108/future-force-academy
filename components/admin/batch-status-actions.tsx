@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { safeJson } from "@/lib/safe-fetch";
 
 type BatchStatus = "DRAFT" | "ACTIVE" | "CLOSED";
 
@@ -16,9 +17,6 @@ type ApiResponse = {
   message: string;
 };
 
-/**
- * Returns the allowed next status transitions and their button labels.
- */
 function getTransitions(
   currentStatus: BatchStatus
 ): Array<{ nextStatus: BatchStatus; label: string; style: string }> {
@@ -65,15 +63,13 @@ export function BatchStatusActions({
   const transitions = getTransitions(currentStatus);
 
   async function handleStatusChange(nextStatus: BatchStatus) {
-    // Confirm close if students enrolled
     if (nextStatus === "CLOSED" && studentCount > 0) {
       const confirmed = window.confirm(
-        `Close "${currentStatus}" batch?\n\n${studentCount} student(s) are enrolled. They will no longer be able to start new attempts on restricted tests.\n\nExisting in-progress attempts will not be affected.`
+        `Close this batch?\n\n${studentCount} student(s) are enrolled. They will no longer be able to start new attempts on restricted tests.\n\nExisting in-progress attempts will not be affected.`
       );
       if (!confirmed) return;
     }
 
-    // Confirm reopen
     if (nextStatus === "ACTIVE" && currentStatus === "CLOSED") {
       const confirmed = window.confirm(
         `Reopen this batch as ACTIVE?\n\nStudents will be able to start attempts again on linked tests.`
@@ -97,16 +93,16 @@ export function BatchStatusActions({
         }
       );
 
-      const json = (await response.json()) as ApiResponse;
+      const json = await safeJson<ApiResponse>(response);
 
-      if (!response.ok || !json.success) {
-        throw new Error(json.message || "Failed to update batch status.");
+      if (!json.success) {
+        throw new Error(json.message);
       }
 
       router.refresh();
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Failed to update status."
+        error instanceof Error ? error.message : "Failed to update status"
       );
     } finally {
       setBusy(false);

@@ -1,5 +1,6 @@
 "use client";
 
+import { safeJson } from "@/lib/safe-fetch";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -46,7 +47,7 @@ export function UpdatePaymentStatusButton({ paymentId, currentStatus }: Props) {
         body: JSON.stringify({ status: nextStatus }),
       });
 
-      const json = (await response.json()) as ApiResponse;
+      const json = await safeJson<ApiResponse>(response);
 
       if (!response.ok || !json.success) {
         throw new Error(json.message || "Failed to update payment status.");

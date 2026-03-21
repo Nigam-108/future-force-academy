@@ -2,6 +2,7 @@ import { requireAuth } from "@/server/auth/guards";
 import { ok, fail } from "@/server/utils/api-response";
 import { AppError } from "@/server/utils/errors";
 import { prisma } from "@/server/db/prisma";
+import { formatAmountFromPaise } from "@/server/repositories/payment.repository";
 
 function getStatusCode(error: unknown) {
   if (error instanceof AppError) return error.statusCode;
@@ -15,9 +16,8 @@ function getStatusCode(error: unknown) {
 /**
  * GET /api/student/batches/available
  *
- * Returns ACTIVE paid batches that the student is NOT yet
- * enrolled in (no StudentBatch AND no active Purchase).
- * These are batches the student can purchase.
+ * Returns ACTIVE paid batches the student is NOT yet enrolled in.
+ * Includes pricing, test list with individual prices, offer details.
  */
 export async function GET() {
   try {
@@ -27,7 +27,7 @@ export async function GET() {
       return fail("Only students can view available batches", 403);
     }
 
-    // Get batch IDs the student already has access to
+    // Get batch IDs student already has access to
     const [studentBatches, activePurchases] = await Promise.all([
       prisma.studentBatch.findMany({
         where: { studentId: session.userId },
@@ -39,12 +39,12 @@ export async function GET() {
       }),
     ]);
 
-    const enrolledBatchIds = new Set<string>([
+    const enrolledBatchIds = new Set([
       ...studentBatches.map((sb) => sb.batchId),
       ...activePurchases.map((p) => p.batchId),
     ]);
 
-    // Find active paid batches NOT in enrolled set
+    // Find active paid batches NOT enrolled
     const availableBatches = await prisma.batch.findMany({
       where: {
         status: "ACTIVE",
@@ -58,23 +58,113 @@ export async function GET() {
         examType: true,
         description: true,
         isPaid: true,
+        price: true,
+        originalPrice: true,
+        offerEndDate: true,
         startDate: true,
         endDate: true,
-        _count: {
-          select: { testBatches: true },
+        testBatches: {
+          select: {
+            price: true,
+            test: {
+              select: {
+                id: true,
+                title: true,
+                slug: true,
+                mode: true,
+                visibilityStatus: true,
+                totalQuestions: true,
+                totalMarks: true,
+                durationInMinutes: true,
+              },
+            },
+          },
+          orderBy: { assignedAt: "asc" },
         },
       },
       orderBy: { createdAt: "desc" },
     });
 
-    return ok(
-      "Available batches fetched successfully",
-      availableBatches.map((b) => ({
-        ...b,
-        linkedTestCount: b._count.testBatches,
-      })),
-      200
+    // Also get tests student already purchased individually in these batches
+    const batchIds = availableBatches.map((b) => b.id);
+    const existingTestPurchases =
+      batchIds.length > 0
+        ? await prisma.testPurchase.findMany({
+            where: {
+              userId: session.userId,
+              batchId: { in: batchIds },
+              status: "ACTIVE",
+            },
+            select: { testId: true, batchId: true },
+          })
+        : [];
+
+    const purchasedTestIds = new Set(
+      existingTestPurchases.map((tp) => tp.testId)
     );
+
+    const result = availableBatches.map((batch) => {
+      const liveTests = batch.testBatches
+        .filter((tb) => tb.test.visibilityStatus === "LIVE")
+        .map((tb) => ({
+          testId: tb.test.id,
+          title: tb.test.title,
+          slug: tb.test.slug,
+          mode: tb.test.mode,
+          totalQuestions: tb.test.totalQuestions,
+          totalMarks: tb.test.totalMarks,
+          durationInMinutes: tb.test.durationInMinutes,
+          price: tb.price ?? 0,
+          priceFormatted:
+            tb.price && tb.price > 0
+              ? formatAmountFromPaise(tb.price)
+              : "Free",
+          isFree: !tb.price || tb.price === 0,
+          alreadyPurchased: purchasedTestIds.has(tb.test.id),
+        }));
+
+      const paidTests = liveTests.filter((t) => !t.isFree && !t.alreadyPurchased);
+      const totalIndividualPricePaise = paidTests.reduce(
+        (sum, t) => sum + t.price,
+        0
+      );
+
+      const discountPercent =
+        batch.price != null && batch.originalPrice != null
+          ? Math.round(
+              ((batch.originalPrice - batch.price) / batch.originalPrice) * 100
+            )
+          : null;
+
+      return {
+        id: batch.id,
+        title: batch.title,
+        slug: batch.slug,
+        examType: batch.examType,
+        description: batch.description,
+        isPaid: batch.isPaid,
+        price: batch.price,
+        originalPrice: batch.originalPrice,
+        offerEndDate: batch.offerEndDate,
+        priceFormatted:
+          batch.price != null ? formatAmountFromPaise(batch.price) : null,
+        originalPriceFormatted:
+          batch.originalPrice != null
+            ? formatAmountFromPaise(batch.originalPrice)
+            : null,
+        discountPercent,
+        liveTests,
+        totalTests: liveTests.length,
+        paidTestCount: paidTests.length,
+        totalIndividualPricePaise,
+        totalIndividualPriceFormatted:
+          totalIndividualPricePaise > 0
+            ? formatAmountFromPaise(totalIndividualPricePaise)
+            : null,
+      };
+    });
+
+    return ok("Available batches fetched successfully", result, 200);
   } catch (error) {
     return fail(
       error instanceof Error

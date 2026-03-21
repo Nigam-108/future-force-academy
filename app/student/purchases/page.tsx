@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { PageShell } from "@/components/shared/page-shell";
 import { fetchInternalApi } from "@/lib/server-api";
-import { RazorpayPayButton } from "@/components/student/razorpay-pay-button";
+import { BuyFullBatchButton } from "@/components/student/buy-full-batch-button";
+import { BuySelectedTestsModal } from "@/components/student/buy-selected-tests-modal";
 
 export const dynamic = "force-dynamic";
 
@@ -56,9 +57,28 @@ type AvailableBatch = {
   examType: string;
   description: string | null;
   isPaid: boolean;
-  startDate: string | null;
-  endDate: string | null;
-  linkedTestCount: number;
+  price: number | null;
+  originalPrice: number | null;
+  offerEndDate: string | null;
+  priceFormatted: string | null;
+  originalPriceFormatted: string | null;
+  discountPercent: number | null;
+  totalTests: number;
+  paidTestCount: number;
+  totalIndividualPricePaise: number;
+  totalIndividualPriceFormatted: string | null;
+  liveTests: Array<{
+    testId: string;
+    title: string;
+    mode: string;
+    totalQuestions: number;
+    totalMarks: number;
+    durationInMinutes: number | null;
+    price: number;
+    priceFormatted: string;
+    isFree: boolean;
+    alreadyPurchased: boolean;
+  }>;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -133,18 +153,18 @@ export default async function PurchasesPage({
   return (
     <PageShell
       title="My Enrollments"
-      description="View your batch enrollments and purchase access to paid batches."
+      description="View enrollments, purchase batch access, or buy individual tests."
     >
-      <div className="space-y-6">
+      <div className="space-y-8">
 
         {/* Payment success banner */}
         {paymentSuccess ? (
           <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
             <p className="font-semibold text-emerald-800">
-              🎉 Payment successful! Your batch access has been activated.
+              🎉 Payment successful! Your access has been activated.
             </p>
             <p className="mt-1 text-sm text-emerald-700">
-              Your enrollment is now active. You can access tests below.
+              Your enrollment is now active. Start your tests below.
             </p>
           </div>
         ) : null}
@@ -174,7 +194,7 @@ export default async function PurchasesPage({
           </div>
         </div>
 
-        {/* ── Available to Purchase ── */}
+        {/* ── Available Batches to Purchase ── */}
         {availableBatches.length > 0 ? (
           <div className="space-y-4">
             <div>
@@ -182,16 +202,18 @@ export default async function PurchasesPage({
                 Available Batches
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Paid batches you can enroll in right now.
+                Enroll in a full batch for complete access, or pick individual
+                tests to save on cost.
               </p>
             </div>
 
             {availableBatches.map((batch) => (
               <div
                 key={batch.id}
-                className="rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 to-white p-6 shadow-sm"
+                className="rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-white p-6 shadow-sm"
               >
-                <div className="flex flex-wrap items-start justify-between gap-4">
+                {/* Batch header */}
+                <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                   <div className="space-y-2">
                     <div className="flex flex-wrap gap-2 text-xs">
                       <span
@@ -204,12 +226,9 @@ export default async function PurchasesPage({
                       <span className="rounded-full bg-rose-50 px-3 py-1 font-medium text-rose-700">
                         Paid Batch
                       </span>
-                      {batch.linkedTestCount > 0 ? (
-                        <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">
-                          {batch.linkedTestCount} test
-                          {batch.linkedTestCount !== 1 ? "s" : ""} included
-                        </span>
-                      ) : null}
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">
+                        {batch.totalTests} tests
+                      </span>
                     </div>
 
                     <h3 className="text-xl font-semibold text-slate-900">
@@ -221,47 +240,118 @@ export default async function PurchasesPage({
                         {batch.description}
                       </p>
                     ) : null}
-
-                    {batch.startDate || batch.endDate ? (
-                      <p className="text-sm text-slate-500">
-                        {batch.startDate
-                          ? `Starts: ${formatDate(batch.startDate)}`
-                          : ""}
-                        {batch.startDate && batch.endDate ? " · " : ""}
-                        {batch.endDate
-                          ? `Ends: ${formatDate(batch.endDate)}`
-                          : ""}
-                      </p>
-                    ) : null}
                   </div>
 
-                  {/* Pay button */}
-                  <div className="w-full sm:w-64">
-                    <RazorpayPayButton
-                      batchId={batch.id}
-                      batchTitle={batch.title}
-                      isPaid={batch.isPaid}
-                    />
-                  </div>
+                  {/* Pricing display */}
+                  {batch.price != null ? (
+                    <div className="text-right space-y-1">
+                      <div className="flex items-baseline gap-2 justify-end">
+                        <span className="text-2xl font-bold text-slate-900">
+                          {batch.priceFormatted}
+                        </span>
+                        {batch.originalPriceFormatted ? (
+                          <span className="text-sm text-slate-400 line-through">
+                            {batch.originalPriceFormatted}
+                          </span>
+                        ) : null}
+                      </div>
+                      {batch.discountPercent != null ? (
+                        <span className="inline-block rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-700">
+                          {batch.discountPercent}% OFF
+                        </span>
+                      ) : null}
+                      {batch.offerEndDate ? (
+                        <p className="text-xs text-rose-600 font-medium">
+                          ⏰ Offer ends {formatDate(batch.offerEndDate)}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
+
+                {/* Two purchase options */}
+                {batch.price != null ? (
+                  <div className="grid gap-4 md:grid-cols-2 mt-4">
+                    {/* Option A — Full batch */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                      <div>
+                        <p className="font-semibold text-slate-900">
+                          Full Batch Access
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Access all {batch.totalTests} tests including future
+                          ones added to this batch
+                        </p>
+                      </div>
+                      <BuyFullBatchButton
+                        batchId={batch.id}
+                        batchTitle={batch.title}
+                        price={batch.price}
+                        originalPrice={batch.originalPrice}
+                        discountPercent={batch.discountPercent}
+                        offerEndDate={batch.offerEndDate}
+                        priceFormatted={batch.priceFormatted ?? ""}
+                        originalPriceFormatted={batch.originalPriceFormatted}
+                      />
+                    </div>
+
+                    {/* Option B — Individual tests */}
+                    {batch.paidTestCount > 0 ? (
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                        <div>
+                          <p className="font-semibold text-slate-900">
+                            Buy Individual Tests
+                          </p>
+                          <p className="text-xs text-slate-500 mt-1">
+                            Pick specific tests. No access to future tests.
+                          </p>
+                          {batch.totalIndividualPriceFormatted ? (
+                            <p className="text-xs text-slate-400 mt-1">
+                              All tests:{" "}
+                              <span className="font-medium text-slate-700">
+                                {batch.totalIndividualPriceFormatted}
+                              </span>{" "}
+                              (no coupon, no future tests)
+                            </p>
+                          ) : null}
+                        </div>
+                        <BuySelectedTestsModal
+                          batchId={batch.id}
+                          batchTitle={batch.title}
+                          tests={batch.liveTests}
+                        />
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-slate-200 p-4 flex items-center justify-center">
+                        <p className="text-sm text-slate-400 text-center">
+                          No individual tests priced yet for this batch
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+                    ⚠️ Pricing not set for this batch yet. Contact admin.
+                  </div>
+                )}
               </div>
             ))}
           </div>
         ) : null}
 
-        {/* ── Active enrollments ── */}
+        {/* ── Active Enrollments ── */}
         {!purchaseResult.success ? (
           <div className="rounded-3xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
             {purchaseResult.message}
           </div>
-        ) : purchases.length === 0 ? (
+        ) : purchases.length === 0 && availableBatches.length === 0 ? (
           <div className="rounded-3xl border border-dashed bg-white p-10 text-center">
             <h2 className="text-xl font-semibold text-slate-900">
               No enrollments yet
             </h2>
             <p className="mt-2 text-sm text-slate-600">
               You have not been enrolled in any batches yet. Contact your admin
-              or purchase a batch above.
+              or wait for paid batches to become available.
             </p>
             <Link
               href="/student/tests"
@@ -310,7 +400,6 @@ export default async function PurchasesPage({
                             </span>
                           ) : null}
                         </div>
-
                         <h3 className="text-xl font-semibold text-slate-900">
                           {purchase.batch.title}
                         </h3>
@@ -382,16 +471,13 @@ export default async function PurchasesPage({
                           ))}
                         </div>
                       </div>
-                    ) : (
-                      <div className="mt-4 rounded-2xl border border-dashed p-4 text-center text-sm text-slate-500">
-                        No live tests linked to this batch yet.
-                      </div>
-                    )}
+                    ) : null}
                   </div>
                 ))}
               </div>
             ) : null}
 
+            {/* Past enrollments */}
             {inactivePurchases.length > 0 ? (
               <div className="space-y-3">
                 <h2 className="text-lg font-semibold text-slate-500">
