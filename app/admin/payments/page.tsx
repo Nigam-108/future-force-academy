@@ -54,6 +54,14 @@ type PaymentStats = {
   pending: number;
   failed: number;
   totalRevenueFormatted: string;
+  fullBatch: {
+    totalRevenueFormatted: string;
+    totalPayments: number;
+  };
+  individualTests: {
+    totalRevenueFormatted: string;
+    totalPayments: number;
+  };
 };
 
 type AdminPageProps = {
@@ -156,37 +164,64 @@ export default async function PaymentsPage({ searchParams }: AdminPageProps) {
       <div className="space-y-6">
 
         {/* ── Stats row ── */}
-        {stats ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-            <div className="rounded-2xl border bg-white p-4 shadow-sm">
-              <p className="text-sm text-slate-500">Total Payments</p>
-              <p className="mt-1 text-2xl font-semibold text-slate-900">
-                {stats.total}
-              </p>
+         {stats ? (
+          <div className="space-y-4">
+            {/* Transaction stats */}
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl border bg-white p-4 shadow-sm">
+                <p className="text-sm text-slate-500">Total Payments</p>
+                <p className="mt-1 text-2xl font-semibold text-slate-900">
+                  {stats.total}
+                </p>
+              </div>
+              <div className="rounded-2xl border bg-white p-4 shadow-sm">
+                <p className="text-sm text-slate-500">Successful</p>
+                <p className="mt-1 text-2xl font-semibold text-emerald-700">
+                  {stats.success}
+                </p>
+              </div>
+              <div className="rounded-2xl border bg-white p-4 shadow-sm">
+                <p className="text-sm text-slate-500">Pending</p>
+                <p className="mt-1 text-2xl font-semibold text-amber-700">
+                  {stats.pending}
+                </p>
+              </div>
+              <div className="rounded-2xl border bg-white p-4 shadow-sm">
+                <p className="text-sm text-slate-500">Failed</p>
+                <p className="mt-1 text-2xl font-semibold text-rose-700">
+                  {stats.failed}
+                </p>
+              </div>
             </div>
-            <div className="rounded-2xl border bg-white p-4 shadow-sm">
-              <p className="text-sm text-slate-500">Successful</p>
-              <p className="mt-1 text-2xl font-semibold text-emerald-700">
-                {stats.success}
-              </p>
-            </div>
-            <div className="rounded-2xl border bg-white p-4 shadow-sm">
-              <p className="text-sm text-slate-500">Pending</p>
-              <p className="mt-1 text-2xl font-semibold text-amber-700">
-                {stats.pending}
-              </p>
-            </div>
-            <div className="rounded-2xl border bg-white p-4 shadow-sm">
-              <p className="text-sm text-slate-500">Failed</p>
-              <p className="mt-1 text-2xl font-semibold text-rose-700">
-                {stats.failed}
-              </p>
-            </div>
-            <div className="rounded-2xl border bg-white p-4 shadow-sm">
-              <p className="text-sm text-slate-500">Total Revenue</p>
-              <p className="mt-1 text-2xl font-semibold text-slate-900">
-                {stats.totalRevenueFormatted}
-              </p>
+
+            {/* Revenue breakdown */}
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="rounded-2xl border bg-white p-4 shadow-sm">
+                <p className="text-sm text-slate-500">Total Revenue</p>
+                <p className="mt-1 text-2xl font-bold text-slate-900">
+                  {stats.totalRevenueFormatted}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 shadow-sm">
+                <p className="text-sm text-emerald-700">Full Batch Revenue</p>
+                <p className="mt-1 text-2xl font-bold text-emerald-800">
+                  {stats.fullBatch?.totalRevenueFormatted ?? "—"}
+                </p>
+                <p className="mt-0.5 text-xs text-emerald-600">
+                  {stats.fullBatch?.totalPayments ?? 0} payment
+                  {(stats.fullBatch?.totalPayments ?? 0) !== 1 ? "s" : ""}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 shadow-sm">
+                <p className="text-sm text-blue-700">Individual Test Revenue</p>
+                <p className="mt-1 text-2xl font-bold text-blue-800">
+                  {stats.individualTests?.totalRevenueFormatted ?? "—"}
+                </p>
+                <p className="mt-0.5 text-xs text-blue-600">
+                  {stats.individualTests?.totalPayments ?? 0} payment
+                  {(stats.individualTests?.totalPayments ?? 0) !== 1 ? "s" : ""}
+                </p>
+              </div>
             </div>
           </div>
         ) : null}
@@ -209,6 +244,16 @@ export default async function PaymentsPage({ searchParams }: AdminPageProps) {
             </div>
           </div>
         ) : null}
+
+         {/* ── Revenue dashboard link ── */}
+        <div className="flex justify-end">
+          <Link
+            href="/admin/revenue"
+            className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
+          >
+            📊 View Revenue Dashboard →
+          </Link>
+        </div>
 
         {/* ── Filter bar ── */}
         <form

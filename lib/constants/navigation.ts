@@ -23,5 +23,6 @@ export const adminNavItems = [
   { label: "Tests", href: "/admin/tests", icon: LayoutGrid },
   { label: "Students", href: "/admin/students", icon: Users },
   { label: "Payments", href: "/admin/payments", icon: CreditCard },
+  { label: "Revenue", href: "/admin/revenue", icon: CreditCard },
   { label: "Permissions", href: "/admin/permissions", icon: Shield }
 ];

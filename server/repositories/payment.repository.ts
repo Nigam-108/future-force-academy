@@ -158,7 +158,15 @@ export async function updatePaymentStatusRecord(
 }
 
 export async function getPaymentSummaryStats() {
-  const [total, success, pending, failed, totalRevenue] = await Promise.all([
+  const [
+    total,
+    success,
+    pending,
+    failed,
+    totalRevenue,
+    fullBatchRevenue,
+    individualTestsRevenue,
+  ] = await Promise.all([
     prisma.payment.count(),
     prisma.payment.count({ where: { status: PaymentStatus.SUCCESS } }),
     prisma.payment.count({ where: { status: PaymentStatus.PENDING } }),
@@ -166,6 +174,24 @@ export async function getPaymentSummaryStats() {
     prisma.payment.aggregate({
       where: { status: PaymentStatus.SUCCESS },
       _sum: { amount: true },
+    }),
+    // Full batch purchase revenue
+    prisma.payment.aggregate({
+      where: {
+        status: PaymentStatus.SUCCESS,
+        purchaseType: "FULL_BATCH",
+      },
+      _sum: { amount: true },
+      _count: { id: true },
+    }),
+    // Individual test purchase revenue
+    prisma.payment.aggregate({
+      where: {
+        status: PaymentStatus.SUCCESS,
+        purchaseType: "INDIVIDUAL_TESTS",
+      },
+      _sum: { amount: true },
+      _count: { id: true },
     }),
   ]);
 
@@ -178,6 +204,20 @@ export async function getPaymentSummaryStats() {
     totalRevenueFormatted: formatAmountFromPaise(
       totalRevenue._sum.amount ?? 0
     ),
+    fullBatch: {
+      totalRevenueInPaise: fullBatchRevenue._sum.amount ?? 0,
+      totalRevenueFormatted: formatAmountFromPaise(
+        fullBatchRevenue._sum.amount ?? 0
+      ),
+      totalPayments: fullBatchRevenue._count.id,
+    },
+    individualTests: {
+      totalRevenueInPaise: individualTestsRevenue._sum.amount ?? 0,
+      totalRevenueFormatted: formatAmountFromPaise(
+        individualTestsRevenue._sum.amount ?? 0
+      ),
+      totalPayments: individualTestsRevenue._count.id,
+    },
   };
 }
 
