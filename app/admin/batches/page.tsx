@@ -300,6 +300,19 @@ export default async function AdminBatchesPage() {
                     >
                       View Linked Tests
                     </Link>
+                    <Link
+  href={`/admin/batches/${batch.id}/pricing`}
+  className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
+>
+  Manage Pricing
+</Link>
+
+<Link
+  href="/admin/coupons"
+  className="rounded-xl border px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+>
+  Manage Coupons
+</Link>
 
                     <DeleteBatchButton
                       batchId={batch.id}
