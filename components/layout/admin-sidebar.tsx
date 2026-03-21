@@ -55,7 +55,7 @@ export function AdminSidebar() {
       </div>
 
       {/* ── Scrollable nav area — only this scrolls ── */}
-      <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-700">
+      <nav className="sidebar-scroll flex-1 overflow-y-auto overflow-x-hidden px-3 py-4">
         <div className="space-y-1">
           {adminNavGroups.map((group) => {
             const isOpen = !isGroupCollapsed(group.groupLabel);
