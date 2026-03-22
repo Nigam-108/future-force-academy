@@ -308,18 +308,19 @@ export function BatchForm({
             ))}
 
             {/* Custom color input */}
-            <label
-              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-slate-300 text-xs text-slate-400 hover:border-slate-500 transition-colors overflow-hidden"
-              title="Custom color"
-            >
-              <input
-                type="color"
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-                className="h-full w-full cursor-pointer opacity-0 absolute"
-              />
-              <span className="pointer-events-none">+</span>
-            </label>
+            {/* /* AFTER — only two changes: add 'relative' to label, add 'inset-0' to input */}
+<label
+  className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-slate-300 text-xs text-slate-400 hover:border-slate-500 transition-colors overflow-hidden"
+  title="Custom color"
+>
+  <input
+    type="color"
+    value={color}
+    onChange={(e) => setColor(e.target.value)}
+    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+  />
+  <span className="pointer-events-none">+</span>
+</label>
           </div>
 
           {/* Preview */}
