@@ -1,3 +1,4 @@
+import { logActivity, ACTIONS } from "@/server/services/activity.service";
 import {
   DifficultyLevel,
   QuestionStatus,
@@ -18,11 +19,14 @@ import type {
   UpdateQuestionInput,
 } from "@/server/validations/question.schema";
 
+// ─── Create question ──────────────────────────────────────────────────────────
+// actorId + actorFullName added so we can log who created it
 export async function createQuestion(
   input: CreateQuestionInput,
-  actorId: string
+  actorId: string,
+  actorFullName: string = "Admin"  // default fallback
 ) {
-  return createQuestionRecord({
+  const question = await createQuestionRecord({
     createdById: actorId,
     type: QuestionType.SINGLE_CORRECT,
     difficulty: DifficultyLevel.MEDIUM,
@@ -36,6 +40,18 @@ export async function createQuestion(
     explanation: input.explanation,
     tags: [],
   });
+
+  // Log AFTER successful creation — inside the function using real variables
+  await logActivity({
+    userId:       actorId,
+    userFullName: actorFullName,
+    action:       ACTIONS.QUESTION_CREATED,
+    description:  `Created question: "${input.questionText.slice(0, 60)}"`,
+    resourceType: "question",
+    resourceId:   question.id,
+  });
+
+  return question;
 }
 
 export async function listQuestions(input: ListQuestionsQueryInput) {
@@ -52,14 +68,21 @@ export async function getQuestionById(id: string) {
   return question;
 }
 
-export async function updateQuestion(id: string, input: UpdateQuestionInput) {
+// ─── Update question ──────────────────────────────────────────────────────────
+// actorId + actorFullName added for logging
+export async function updateQuestion(
+  id: string,
+  input: UpdateQuestionInput,
+  actorId: string = "",
+  actorFullName: string = "Admin"
+) {
   const existingQuestion = await findQuestionById(id);
 
   if (!existingQuestion) {
     throw new AppError("Question not found", 404);
   }
 
-  return updateQuestionRecord(id, {
+  const updated = await updateQuestionRecord(id, {
     type: QuestionType.SINGLE_CORRECT,
     difficulty: existingQuestion.difficulty ?? DifficultyLevel.MEDIUM,
     status: existingQuestion.status ?? QuestionStatus.ACTIVE,
@@ -72,9 +95,29 @@ export async function updateQuestion(id: string, input: UpdateQuestionInput) {
     explanation: input.explanation,
     tags: existingQuestion.tags ?? [],
   });
+
+  // Log AFTER successful update — using actual id variable
+  if (actorId) {
+    await logActivity({
+      userId:       actorId,
+      userFullName: actorFullName,
+      action:       ACTIONS.QUESTION_UPDATED,
+      description:  `Updated question: "${input.questionText.slice(0, 60)}"`,
+      resourceType: "question",
+      resourceId:   id,
+    });
+  }
+
+  return updated;
 }
 
-export async function deleteQuestion(id: string) {
+// ─── Delete question ──────────────────────────────────────────────────────────
+// actorId + actorFullName added for logging
+export async function deleteQuestion(
+  id: string,
+  actorId: string = "",
+  actorFullName: string = "Admin"
+) {
   const existingQuestion = await findQuestionDeleteImpact(id);
 
   if (!existingQuestion) {
@@ -89,6 +132,18 @@ export async function deleteQuestion(id: string) {
   }
 
   const deleted = await deleteQuestionRecord(id);
+
+  // Log AFTER successful deletion
+  if (actorId) {
+    await logActivity({
+      userId:       actorId,
+      userFullName: actorFullName,
+      action:       ACTIONS.QUESTION_DELETED,
+      description:  `Deleted question: "${deleted.questionText.slice(0, 60)}"`,
+      resourceType: "question",
+      resourceId:   id,
+    });
+  }
 
   return {
     deletedQuestionId: deleted.id,

@@ -1,3 +1,4 @@
+import { logActivity, ACTIONS } from "@/server/services/activity.service";
 import { AppError } from "@/server/utils/errors";
 import { findUserPermission } from "@/server/repositories/permission.repository";
 

@@ -1,3 +1,4 @@
+import { logActivity, ACTIONS } from "@/server/services/activity.service";
 import {
   DifficultyLevel,
   QuestionStatus,
@@ -7,9 +8,7 @@ import { createQuestionRecord } from "@/server/repositories/question.repository"
 import { AppError } from "@/server/utils/errors";
 import type { BulkImportQuestionsInput } from "@/server/validations/question-import.schema";
 
-/**
- * Internal parsed MCQ structure after reading pasted text.
- */
+// ─── Internal parsed MCQ structure ────────────────────────────────────────────
 type ParsedMcq = {
   questionText: string;
   optionA: string;
@@ -20,31 +19,12 @@ type ParsedMcq = {
   explanation?: string;
 };
 
-/**
- * Normalize line endings so pasted content behaves consistently
- * across Windows / Mac / browser environments.
- */
+// Normalize line endings across Windows/Mac/browser
 function normalizeText(input: string) {
   return input.replace(/\r\n/g, "\n").trim();
 }
 
-/**
- * Splits the raw textarea content into separate question blocks.
- *
- * Current import rule:
- * - each question block is separated by a line containing ---
- *
- * Example:
- * Question: ...
- * A: ...
- * B: ...
- * C: ...
- * D: ...
- * Answer: B
- * Explanation: ...
- * ---
- * Question: ...
- */
+// Split raw textarea into question blocks separated by ---
 function splitIntoBlocks(rawText: string) {
   return normalizeText(rawText)
     .split(/\n\s*---\s*\n/g)
@@ -52,14 +32,7 @@ function splitIntoBlocks(rawText: string) {
     .filter(Boolean);
 }
 
-/**
- * Extracts one field from a block using a strict line-based prefix.
- *
- * Example:
- * prefix = "Question:"
- * line = "Question: What is 2 + 2?"
- * result = "What is 2 + 2?"
- */
+// Extract a required field from a block — throws if missing
 function extractRequiredField(
   block: string,
   prefix: string,
@@ -78,44 +51,23 @@ function extractRequiredField(
   return match[1].trim();
 }
 
-/**
- * Extracts an optional field from a block.
- *
- * If not found, returns undefined.
- */
+// Extract an optional field — returns undefined if not found
 function extractOptionalField(block: string, prefix: string): string | undefined {
   const regex = new RegExp(`^${prefix}\\s*(.+)$`, "im");
   const match = block.match(regex);
-
-  if (!match?.[1]?.trim()) {
-    return undefined;
-  }
-
+  if (!match?.[1]?.trim()) return undefined;
   return match[1].trim();
 }
 
-/**
- * Parses one pasted question block into structured MCQ data.
- *
- * Expected format:
- * Question: ...
- * A: ...
- * B: ...
- * C: ...
- * D: ...
- * Answer: A/B/C/D
- * Explanation: ... (optional)
- */
+// Parse one question block into structured MCQ data
 function parseQuestionBlock(block: string, blockIndex: number): ParsedMcq {
   const questionText = extractRequiredField(block, "Question:", blockIndex);
-  const optionA = extractRequiredField(block, "A:", blockIndex);
-  const optionB = extractRequiredField(block, "B:", blockIndex);
-  const optionC = extractRequiredField(block, "C:", blockIndex);
-  const optionD = extractRequiredField(block, "D:", blockIndex);
-  const answerRaw = extractRequiredField(block, "Answer:", blockIndex)
-    .toUpperCase()
-    .trim();
-  const explanation = extractOptionalField(block, "Explanation:");
+  const optionA      = extractRequiredField(block, "A:", blockIndex);
+  const optionB      = extractRequiredField(block, "B:", blockIndex);
+  const optionC      = extractRequiredField(block, "C:", blockIndex);
+  const optionD      = extractRequiredField(block, "D:", blockIndex);
+  const answerRaw    = extractRequiredField(block, "Answer:", blockIndex).toUpperCase().trim();
+  const explanation  = extractOptionalField(block, "Explanation:");
 
   if (!["A", "B", "C", "D"].includes(answerRaw)) {
     throw new AppError(
@@ -137,18 +89,13 @@ function parseQuestionBlock(block: string, blockIndex: number): ParsedMcq {
 
   return {
     questionText,
-    optionA,
-    optionB,
-    optionC,
-    optionD,
+    optionA, optionB, optionC, optionD,
     correctAnswer: answerRaw as ParsedMcq["correctAnswer"],
     explanation,
   };
 }
 
-/**
- * Converts the full textarea content into validated structured MCQs.
- */
+// Parse full textarea into array of validated MCQs
 function parseBulkQuestions(rawText: string) {
   const blocks = splitIntoBlocks(rawText);
 
@@ -159,54 +106,46 @@ function parseBulkQuestions(rawText: string) {
   return blocks.map((block, index) => parseQuestionBlock(block, index));
 }
 
-/**
- * Main bulk import service.
- *
- * Current business rule:
- * - every imported question is created as:
- *   type = SINGLE_CORRECT
- *   difficulty = MEDIUM
- *   status = ACTIVE
- *   tags = []
- *
- * Why:
- * - matches your simplified admin workflow
- * - fastest possible entry for bulk question generation
- */
+// ─── Main bulk import service ─────────────────────────────────────────────────
+// actorFullName added so we can log who did the import
 export async function bulkImportQuestions(
   input: BulkImportQuestionsInput,
-  actorId: string
+  actorId: string,
+  actorFullName: string = "Admin"  // default fallback
 ) {
   const parsedQuestions = parseBulkQuestions(input.rawText);
 
   const createdItems = [];
 
-  /**
-   * Sequential creation is used here intentionally.
-   *
-   * Why not Promise.all?
-   * - easier error tracing
-   * - safer if future hooks/logging are added
-   * - simpler for debugging import failures
-   */
+  // Sequential creation — easier error tracing than Promise.all for imports
   for (const item of parsedQuestions) {
     const created = await createQuestionRecord({
       createdById: actorId,
-      type: QuestionType.SINGLE_CORRECT,
-      difficulty: DifficultyLevel.MEDIUM,
-      status: QuestionStatus.ACTIVE,
+      type:        QuestionType.SINGLE_CORRECT,
+      difficulty:  DifficultyLevel.MEDIUM,
+      status:      QuestionStatus.ACTIVE,
       questionText: item.questionText,
-      optionA: item.optionA,
-      optionB: item.optionB,
-      optionC: item.optionC,
-      optionD: item.optionD,
+      optionA:      item.optionA,
+      optionB:      item.optionB,
+      optionC:      item.optionC,
+      optionD:      item.optionD,
       correctAnswer: item.correctAnswer,
-      explanation: item.explanation,
+      explanation:   item.explanation,
       tags: [],
     });
 
     createdItems.push(created);
   }
+
+  // Log AFTER all questions successfully imported — inside function using real count
+  await logActivity({
+    userId:       actorId,
+    userFullName: actorFullName,
+    action:       ACTIONS.QUESTION_IMPORTED,
+    description:  `Bulk imported ${createdItems.length} questions`,
+    resourceType: "question",
+    metadata:     { count: createdItems.length },
+  });
 
   return {
     totalImported: createdItems.length,

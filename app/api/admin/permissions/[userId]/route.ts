@@ -4,6 +4,7 @@ import { AppError } from "@/server/utils/errors";
 import { findAllPermissionsForUser } from "@/server/repositories/permission.repository";
 import { prisma } from "@/server/db/prisma";
 import { z } from "zod";
+import { logActivity, ACTIONS } from "@/server/services/activity.service";
 
 // ─── Validation schema for PATCH body ─────────────────────────────────────────
 // granted: true = explicitly grant, false = explicitly revoke, null = reset to role default
@@ -93,6 +94,7 @@ export async function PATCH(
       });
       return NextResponse.json({ message: "Override removed — reverted to role default" });
     }
+    
 
     // Upsert override — creates if new, updates if already exists
     await prisma.userPermissionOverride.upsert({
@@ -100,6 +102,21 @@ export async function PATCH(
       update: { granted },
       create: { userId, permissionId: permission.id, granted },
     });
+    const session = await requireAdmin("permission.manage"); // already have session
+    const adminUser = await prisma.user.findUnique({
+  where: { id: session.userId },
+  select: { fullName: true },
+});
+    await logActivity({
+  userId:       session.userId,
+  userFullName: adminUser?.fullName ?? "Admin",
+  action:       ACTIONS.PERMISSION_UPDATED,
+  description:  `${granted ? "Granted" : "Revoked"} permission "${permissionKey}" for user ${userId}`,
+  resourceType: "permission",
+  resourceId:   userId,
+  metadata:     { permissionKey, granted },
+});
+    
 
     return NextResponse.json({
       message: `Permission "${permissionKey}" ${granted ? "granted" : "revoked"} for user`,

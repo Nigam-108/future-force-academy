@@ -1,21 +1,37 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/server/auth/guards";
-import { fail, ok } from "@/server/utils/api-response";
+import { AppError } from "@/server/utils/errors";
 import { unblockStudent } from "@/server/services/student.service";
+import { prisma } from "@/server/db/prisma";
 
-type RouteContext = {
-  params: Promise<{ id: string }>;
-};
-
-export async function POST(_request: NextRequest, context: RouteContext) {
+export async function PATCH(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    await requireAdmin("student.manage");
-    const { id } = await context.params;
+    // student.manage permission required
+    const session = await requireAdmin("student.manage");
 
-    const data = await unblockStudent(id);
-    return ok("Student unblocked successfully", data, 200);
+    // Next.js 15 — params is a Promise
+    const { id: studentId } = await params;
+
+    // Fetch admin fullName for activity log
+    const adminUser = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { fullName: true },
+    });
+
+    const result = await unblockStudent(
+      studentId,
+      session.userId,
+      adminUser?.fullName ?? "Admin"
+    );
+
+    return NextResponse.json({ message: "Student unblocked successfully", data: result });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to unblock student";
-    return fail(message, 400);
+    if (error instanceof AppError) {
+      return NextResponse.json({ message: error.message }, { status: error.statusCode });
+    }
+    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
   }
 }

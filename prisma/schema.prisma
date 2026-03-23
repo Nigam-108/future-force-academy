@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -100,6 +101,8 @@ model User {
   testPurchases TestPurchase[]
   /// Inside model User — add this line with other relations
   permissionOverrides UserPermissionOverride[]
+  // Inside model User — add with other relations
+activityLogs ActivityLog[]
 }
 
 model Question {
@@ -498,4 +501,39 @@ model UserPermissionOverride {
   permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@unique([userId, permissionId])
+}
+
+// ─── Audit / Activity Log ──────────────────────────────────────────────────────
+// Tracks every significant admin action for security + accountability
+// Logged automatically via logActivity() in service layer
+// ADMIN and SUB_ADMIN actions both get logged
+model ActivityLog {
+  id           String   @id @default(cuid())
+
+  // Who did the action
+  userId       String
+  userFullName String   // Denormalized — so logs survive if user is deleted
+
+  // What they did
+  action       String   // e.g. "question.created", "batch.status_changed"
+  description  String   // Human readable: "Created question: Newton's Laws Q1"
+
+  // What resource was affected (optional but useful)
+  resourceType String?  // e.g. "question", "test", "batch", "student"
+  resourceId   String?  // The actual cuid of the affected record
+
+  // Extra metadata — JSON blob for flexible extra info
+  metadata     Json?    // e.g. { "from": "DRAFT", "to": "ACTIVE" }
+
+  // Request context
+  ipAddress    String?  // Optional — for security audit
+
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([action])
+  @@index([resourceType, resourceId])
+  @@index([createdAt])
 }

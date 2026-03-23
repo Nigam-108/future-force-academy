@@ -1,3 +1,4 @@
+import { logActivity, ACTIONS } from "@/server/services/activity.service";
 import { UserStatus } from "@prisma/client";
 import { AppError } from "@/server/utils/errors";
 import {
@@ -12,10 +13,7 @@ import {
   updateStudentUserById,
 } from "@/server/repositories/student.repository";
 import { UpdateStudentProfileInput } from "@/server/validations/student-profile.schema";
-
-import {
-  findStudentBatchAssignments,
-} from "@/server/repositories/batch.repository";
+import { findStudentBatchAssignments } from "@/server/repositories/batch.repository";
 
 export async function getStudentDashboard(userId: string) {
   const student = await findStudentUserById(userId);
@@ -29,11 +27,7 @@ export async function getStudentDashboard(userId: string) {
     findStudentBatchAssignments(userId),
   ]);
 
-  return {
-    student,
-    stats,
-    batchMemberships,
-  };
+  return { student, stats, batchMemberships };
 }
 
 export async function getStudentProfile(userId: string) {
@@ -46,7 +40,10 @@ export async function getStudentProfile(userId: string) {
   return student;
 }
 
-export async function updateStudentProfile(userId: string, input: UpdateStudentProfileInput) {
+export async function updateStudentProfile(
+  userId: string,
+  input: UpdateStudentProfileInput
+) {
   const student = await findStudentUserById(userId);
 
   if (!student) {
@@ -74,34 +71,34 @@ export async function getStudentResultById(userId: string, attemptId: string) {
   }
 
   const answerReview = result.answers.map((answer, index) => ({
-    answerId: answer.id,
-    questionNumber: index + 1,
-    questionText: answer.testQuestion.question.questionText,
-    selectedAnswer: answer.selectedAnswer,
-    correctAnswer: answer.testQuestion.question.correctAnswer,
-    explanation: answer.testQuestion.question.explanation,
-    isAnswered: answer.isAnswered,
-    isCorrect: answer.isCorrect,
+    answerId:        answer.id,
+    questionNumber:  index + 1,
+    questionText:    answer.testQuestion.question.questionText,
+    selectedAnswer:  answer.selectedAnswer,
+    correctAnswer:   answer.testQuestion.question.correctAnswer,
+    explanation:     answer.testQuestion.question.explanation,
+    isAnswered:      answer.isAnswered,
+    isCorrect:       answer.isCorrect,
     markedForReview: answer.markedForReview,
-    sectionTitle: answer.testQuestion.section?.title ?? null,
+    sectionTitle:    answer.testQuestion.section?.title ?? null,
   }));
 
   return {
     summary: {
-      attemptId: result.id,
-      testId: result.testId,
-      testTitle: result.test.title,
-      status: result.status,
-      startedAt: result.startedAt,
-      submittedAt: result.submittedAt,
+      attemptId:          result.id,
+      testId:             result.testId,
+      testTitle:          result.test.title,
+      status:             result.status,
+      startedAt:          result.startedAt,
+      submittedAt:        result.submittedAt,
       totalMarksObtained: result.totalMarksObtained,
-      correctCount: result.correctCount,
-      wrongCount: result.wrongCount,
-      unansweredCount: result.unansweredCount,
-      percentage: result.percentage,
-      rank: result.rank,
+      correctCount:       result.correctCount,
+      wrongCount:         result.wrongCount,
+      unansweredCount:    result.unansweredCount,
+      percentage:         result.percentage,
+      rank:               result.rank,
     },
-    sections: result.test.sections,
+    sections:     result.test.sections,
     answerReview,
   };
 }
@@ -125,17 +122,60 @@ export async function getAdminStudent(studentId: string) {
   return result;
 }
 
-export async function blockStudent(studentId: string) {
+// ─── Block student ────────────────────────────────────────────────────────────
+// actorId + actorFullName added so we can log who blocked them
+export async function blockStudent(
+  studentId: string,
+  actorId: string = "",
+  actorFullName: string = "Admin"
+) {
+  // Use findStudentUserById — simpler type, definitely has fullName
+  const studentUser = await findStudentUserById(studentId);
+
   try {
-    return await updateStudentStatus(studentId, UserStatus.BLOCKED);
+    const result = await updateStudentStatus(studentId, UserStatus.BLOCKED);
+
+    if (actorId) {
+      await logActivity({
+        userId:       actorId,
+        userFullName: actorFullName,
+        action:       ACTIONS.STUDENT_BLOCKED,
+        description:  `Blocked student: "${studentUser?.fullName ?? studentId}"`,
+        resourceType: "student",
+        resourceId:   studentId,
+      });
+    }
+
+    return result;
   } catch {
     throw new AppError("Student not found", 404);
   }
 }
 
-export async function unblockStudent(studentId: string) {
+// ─── Unblock student ──────────────────────────────────────────────────────────
+export async function unblockStudent(
+  studentId: string,
+  actorId: string = "",
+  actorFullName: string = "Admin"
+) {
+  // Use findStudentUserById — simpler type, definitely has fullName
+  const studentUser = await findStudentUserById(studentId);
+
   try {
-    return await updateStudentStatus(studentId, UserStatus.ACTIVE);
+    const result = await updateStudentStatus(studentId, UserStatus.ACTIVE);
+
+    if (actorId) {
+      await logActivity({
+        userId:       actorId,
+        userFullName: actorFullName,
+        action:       ACTIONS.STUDENT_UNBLOCKED,
+        description:  `Unblocked student: "${studentUser?.fullName ?? studentId}"`,
+        resourceType: "student",
+        resourceId:   studentId,
+      });
+    }
+
+    return result;
   } catch {
     throw new AppError("Student not found", 404);
   }
