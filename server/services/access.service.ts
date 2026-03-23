@@ -1,5 +1,5 @@
 import { prisma } from "@/server/db/prisma";
-
+import { isPurchaseValid } from "@/server/repositories/payment.repository";
 /**
  * Central access resolver — single source of truth for all access decisions.
  *
@@ -127,7 +127,8 @@ export async function studentHasTestAccess(
     },
     select: { id: true },
   });
-  if (testPurchase) return true;
+  // Now checks validUntil before granting access
+if (testPurchase && isPurchaseValid(testPurchase)) return true;
 
   // Condition 4: Test is free in a batch where student has individual purchases
   const freeTestBatch = await prisma.testBatch.findFirst({

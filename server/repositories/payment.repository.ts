@@ -313,3 +313,52 @@ export async function listPaymentsByStudent(userId: string) {
     include: paymentInclude,
   });
 }
+
+// Called by cron job — only checks ACTIVE purchases, skips already EXPIRED ones
+export async function findExpiredActivePurchases() {
+  return prisma.purchase.findMany({
+    where: {
+      status: "ACTIVE",
+      validUntil: {
+        lt:  new Date(), // past their expiry date
+        not: null,       // only if validUntil was actually set
+      },
+    },
+    select: {
+      id:         true,
+      userId:     true,
+      batchId:    true,
+      validUntil: true,
+      user: { select: { fullName: true, email: true } },
+    },
+  });
+}
+
+// ─── Bulk mark purchases as EXPIRED ──────────────────────────────────────────
+// One query to expire many purchases at once — efficient for cron jobs
+export async function bulkExpirePurchases(purchaseIds: string[]) {
+  return prisma.purchase.updateMany({
+    where: {
+      id:     { in: purchaseIds },
+      status: "ACTIVE", // safety guard — never expire already-expired ones
+    },
+    data: { status: "EXPIRED" },
+  });
+}
+
+// ─── Check if a single purchase is currently valid ───────────────────────────
+// Used in access.service.ts for real-time enforcement at access check time
+// Pure function — no DB call needed, just checks the fields
+export function isPurchaseValid(purchase: {
+  status: string;
+  validUntil: Date | null;
+}): boolean {
+  // Must be ACTIVE status first
+  if (purchase.status !== "ACTIVE") return false;
+
+  // No validUntil = lifetime purchase — always valid
+  if (!purchase.validUntil) return true;
+
+  // Check if we're still within the validity window
+  return new Date() <= purchase.validUntil;
+}

@@ -20,6 +20,12 @@ import type {
   UpdatePaymentStatusInput,
 } from "@/server/validations/payment.schema";
 
+import { logActivity } from "@/server/services/activity.service";
+import {
+  findExpiredActivePurchases,
+  bulkExpirePurchases,
+} from "@/server/repositories/payment.repository";
+
 
 
 // ─── Admin payment services ───────────────────────────────────────────────────
@@ -348,5 +354,51 @@ export async function getStudentPurchaseHistory(userId: string) {
     totalPayments: payments.length,
     totalPurchases: purchases.length,
     activePurchases: purchases.filter((p) => p.status === "ACTIVE").length,
+  };
+}
+
+// ─── Expire all overdue purchases ─────────────────────────────────────────────
+// Called by cron job daily OR manually from admin panel
+// Finds all ACTIVE purchases past validUntil → marks them EXPIRED in bulk
+// Logs the action to activity trail with count + affected IDs
+export async function expireOverduePurchases(): Promise<{
+  checked: number;
+  expired: number;
+  details: Array<{ id: string; userId: string; batchId: string | null }>;
+}> {
+  // Step 1 — find all purchases that need expiring
+  const expiredPurchases = await findExpiredActivePurchases();
+
+  // Nothing to expire — return early
+  if (expiredPurchases.length === 0) {
+    return { checked: 0, expired: 0, details: [] };
+  }
+
+  const ids = expiredPurchases.map((p) => p.id);
+
+  // Step 2 — bulk expire in one DB query
+  const result = await bulkExpirePurchases(ids);
+
+  // Step 3 — log to activity trail for admin visibility
+  await logActivity({
+    userId:       "system",
+    userFullName: "System (Cron)",
+    action:       "purchase.expired",
+    description:  `Auto-expired ${result.count} purchase(s) past their validUntil date`,
+    resourceType: "purchase",
+    metadata: {
+      expiredCount: result.count,
+      purchaseIds:  ids,
+    },
+  });
+
+  return {
+    checked: expiredPurchases.length,
+    expired: result.count,
+    details: expiredPurchases.map((p) => ({
+      id:      p.id,
+      userId:  p.userId,
+      batchId: p.batchId,
+    })),
   };
 }
