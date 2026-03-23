@@ -23,7 +23,7 @@ function getStatusCode(error: unknown) {
  */
 export async function GET(_request: NextRequest) {
   try {
-    await requireAdmin();
+    await requireAdmin("revenue.view");
 
     // ── 1. Global totals ──────────────────────────────────────────────────────
     const globalStats = await getPricingRevenueStats();

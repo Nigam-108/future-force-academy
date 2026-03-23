@@ -27,7 +27,7 @@ type RouteContext = {
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("batch.manage");
     const { id } = await context.params;
 
     const result = await getBatchById(id);
@@ -66,7 +66,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("batch.manage");
 
     const { id } = await context.params;
     const body = await request.json();
@@ -89,7 +89,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("batch.manage");
     const { id } = await context.params;
     const result = await deleteBatch(id);
     return ok("Batch deleted successfully", result, 200);

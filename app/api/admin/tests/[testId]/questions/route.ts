@@ -27,7 +27,7 @@ type RouteContext = {
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("test.manage");
     const { testId } = await context.params;
 
     const result = await getAssignedQuestionsForTest(testId);
@@ -41,7 +41,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("test.manage");
     const { testId } = await context.params;
     const body = await request.json();
 

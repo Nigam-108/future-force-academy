@@ -22,7 +22,7 @@ type RouteContext = {
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("payment.manage");
     const { purchaseId } = await context.params;
     const result = await getAdminPurchaseById(purchaseId);
     return ok("Purchase fetched successfully", result, 200);
@@ -36,7 +36,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("payment.manage");
     const { purchaseId } = await context.params;
     const result = await cancelPurchase(purchaseId);
     return ok("Purchase cancelled successfully", result, 200);

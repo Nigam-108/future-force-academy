@@ -15,7 +15,7 @@ function getStatusCode(error: unknown) {
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin();
+    await requireAdmin("revenue.view");
     const batchId =
       request.nextUrl.searchParams.get("batchId") ?? undefined;
     const result = await getPricingRevenueStats(batchId);

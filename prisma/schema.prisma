@@ -98,6 +98,8 @@ model User {
   purchases Purchase[]
   couponUsages  CouponUsage[]
   testPurchases TestPurchase[]
+  /// Inside model User — add this line with other relations
+  permissionOverrides UserPermissionOverride[]
 }
 
 model Question {
@@ -454,4 +456,46 @@ model TestPurchase {
   payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 
   @@unique([userId, testId])
+}
+
+/// ─── Permission System ─────────────────────────────────────────────────────
+/// 6A seeded the permission keys
+/// 6B enforces them on all admin API routes
+
+model Permission {
+  id          String  @id @default(cuid())
+  key         String  @unique  // e.g. "question.manage", "payment.view"
+  label       String           // Human readable: "Manage Questions"
+  description String?          // What this permission allows
+
+  rolePermissions RolePermission[]
+  userOverrides   UserPermissionOverride[]
+}
+
+/// Default permissions per role (ADMIN gets all, SUB_ADMIN gets limited set)
+model RolePermission {
+  id           String   @id @default(cuid())
+  role         UserRole
+  permissionId String
+  granted      Boolean  @default(true)
+
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([role, permissionId])
+}
+
+/// Per-user overrides — admin can grant/revoke specific permissions for a sub-admin
+model UserPermissionOverride {
+  id           String   @id @default(cuid())
+  userId       String
+  permissionId String
+  granted      Boolean  // true = explicitly granted, false = explicitly revoked
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionId])
 }

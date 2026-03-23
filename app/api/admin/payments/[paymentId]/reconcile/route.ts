@@ -25,7 +25,7 @@ type RouteContext = {
  */
 export async function POST(_request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("payment.manage");
     const { paymentId } = await context.params;
     const result = await reconcilePayment(paymentId);
     return ok("Reconciliation completed", result, 200);

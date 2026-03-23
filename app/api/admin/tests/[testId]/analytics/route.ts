@@ -26,7 +26,8 @@ type RouteContext = {
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    // GET — analytics is report.view not test.manage:
+await requireAdmin("report.view");
 
     const { testId } = await context.params;
     const data = await getTestAnalytics(testId);

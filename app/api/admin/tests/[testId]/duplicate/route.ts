@@ -29,7 +29,8 @@ type RouteContext = {
  */
 export async function POST(_request: NextRequest, context: RouteContext) {
   try {
-    const admin = await requireAdmin();
+    // POST:
+    const admin = await requireAdmin("test.manage");
     const { testId } = await context.params;
 
     const duplicated = await duplicateTest(testId, admin.userId);

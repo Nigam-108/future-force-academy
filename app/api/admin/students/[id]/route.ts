@@ -9,7 +9,7 @@ type RouteContext = {
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("student.manage");
     const { id } = await context.params;
 
     const data = await getAdminStudent(id);

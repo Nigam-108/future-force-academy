@@ -19,7 +19,8 @@ function getStatusCode(error: unknown) {
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin();
+    // GET and POST:
+await requireAdmin("coupon.manage");
 
     const query = Object.fromEntries(
       request.nextUrl.searchParams.entries()
@@ -42,7 +43,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAdmin();
+    // GET and POST:
+await requireAdmin("coupon.manage");
 
     const body = await request.json();
     const parsed = createCouponSchema.safeParse(body);

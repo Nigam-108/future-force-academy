@@ -12,7 +12,7 @@ import {
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin();
+    await requireAdmin("question.manage");
 
     const query = Object.fromEntries(request.nextUrl.searchParams.entries());
     const parsed = listQuestionsQuerySchema.safeParse(query);
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await requireAdmin();
+    const session = await requireAdmin("question.manage");
     const body = await request.json();
 
     const parsed = createQuestionSchema.safeParse(body);

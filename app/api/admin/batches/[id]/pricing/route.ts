@@ -23,7 +23,7 @@ type RouteContext = {
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("batch.manage");
     const { id } = await context.params;
     const result = await getBatchPricing(id);
     return ok("Batch pricing fetched successfully", result, 200);
@@ -37,7 +37,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("batch.manage");
     const { id } = await context.params;
     const body = await request.json();
     const parsed = updateBatchPricingSchema.safeParse(body);

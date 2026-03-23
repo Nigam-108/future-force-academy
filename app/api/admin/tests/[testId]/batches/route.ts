@@ -23,7 +23,8 @@ type RouteContext = {
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    // GET and POST:
+    await requireAdmin("test.manage");
     const { testId } = await context.params;
     const result = await getTestBatchAssignments(testId);
     return ok("Test batch assignments fetched successfully", result, 200);
@@ -37,7 +38,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    // GET and POST:
+    await requireAdmin("test.manage");
     const { testId } = await context.params;
     const body = await request.json();
     const parsed = assignBatchesToTestSchema.safeParse(body);

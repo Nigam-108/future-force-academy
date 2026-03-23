@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
      * requireAdmin() returns the authenticated session payload,
      * and this payload uses `userId` instead of `id`.
      */
-    const admin = await requireAdmin();
+    const admin = await requireAdmin("question.manage");
 
     const body = await request.json();
     const parsed = bulkImportQuestionsSchema.safeParse(body);

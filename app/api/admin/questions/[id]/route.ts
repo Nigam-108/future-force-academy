@@ -28,7 +28,7 @@ type RouteContext = {
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("question.manage");
 
     const { id } = await context.params;
     const question = await getQuestionById(id);
@@ -44,7 +44,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("question.manage");
 
     const { id } = await context.params;
     const body = await request.json();
@@ -67,7 +67,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("question.manage");
 
     const { id } = await context.params;
     const result = await deleteQuestion(id);

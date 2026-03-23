@@ -20,7 +20,7 @@ function getStatusCode(error: unknown) {
  */
 export async function POST(request: NextRequest) {
   try {
-    await requireAdmin();
+    await requireAdmin("payment.manage");
     const body = await request.json();
     const parsed = manualEnrollSchema.safeParse(body);
 

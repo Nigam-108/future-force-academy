@@ -26,7 +26,7 @@ type RouteContext = {
  */
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("batch.manage");
 
     const { id } = await context.params;
     const body = await request.json();

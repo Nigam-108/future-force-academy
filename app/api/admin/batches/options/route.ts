@@ -22,7 +22,7 @@ function getStatusCode(error: unknown) {
  */
 export async function GET(_request: NextRequest) {
   try {
-    await requireAdmin();
+    await requireAdmin("batch.manage");
     const result = await getBatchOptions();
     return ok("Batch options fetched successfully", result, 200);
   } catch (error) {

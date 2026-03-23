@@ -24,7 +24,7 @@ function getStatusCode(error: unknown) {
  */
 export async function POST() {
   try {
-    await requireAdmin();
+    await requireAdmin("payment.manage");
 
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
 

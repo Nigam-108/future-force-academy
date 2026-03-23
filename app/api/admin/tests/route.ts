@@ -23,7 +23,7 @@ function getStatusCode(error: unknown) {
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin();
+    await requireAdmin("test.manage");
 
     const query = Object.fromEntries(request.nextUrl.searchParams.entries());
     const parsed = listTestsQuerySchema.safeParse(query);
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await requireAdmin();
+    const session = await requireAdmin("test.manage");
     const body = await request.json();
 
     const parsed = createTestSchema.safeParse(body);

@@ -30,7 +30,7 @@ function getStatusCode(error: unknown) {
  */
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin();
+    await requireAdmin("batch.manage");
 
     const queryObject = Object.fromEntries(request.nextUrl.searchParams.entries());
     const parsed = listBatchesQuerySchema.safeParse(queryObject);
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const admin = await requireAdmin();
+    const admin = await requireAdmin("batch.manage");
 
     const body = await request.json();
     const parsed = createBatchSchema.safeParse(body);

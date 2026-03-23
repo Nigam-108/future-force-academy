@@ -20,7 +20,7 @@ type RouteContext = {
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("batch.manage");
     const { id: batchId, testId } = await context.params;
     const body = await request.json();
     const parsed = updateTestPriceSchema.safeParse(body);

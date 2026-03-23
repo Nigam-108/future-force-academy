@@ -27,7 +27,8 @@ type RouteContext = {
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    // GET and PATCH:
+await requireAdmin("coupon.manage");
     const { couponId } = await context.params;
     const result = await getCouponDetail(couponId);
     return ok("Coupon fetched successfully", result, 200);
@@ -41,7 +42,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    // GET and PATCH:
+await requireAdmin("coupon.manage");
     const { couponId } = await context.params;
     const body = await request.json();
 

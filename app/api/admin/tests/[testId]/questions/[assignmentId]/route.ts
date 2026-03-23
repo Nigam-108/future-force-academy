@@ -30,7 +30,7 @@ type RouteContext = {
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("test.manage");
 
     const { testId, assignmentId } = await context.params;
     const body = await request.json();
@@ -59,7 +59,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("test.manage");
 
     const { testId, assignmentId } = await context.params;
     const result = await removeAssignedQuestionFromTest(testId, assignmentId);

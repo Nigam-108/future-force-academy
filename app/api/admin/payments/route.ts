@@ -19,7 +19,7 @@ function getStatusCode(error: unknown) {
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin();
+    await requireAdmin("payment.manage");
 
     const query = Object.fromEntries(request.nextUrl.searchParams.entries());
 

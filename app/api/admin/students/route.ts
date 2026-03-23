@@ -6,7 +6,7 @@ import { listAdminStudentsQuerySchema } from "@/server/validations/admin-student
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin();
+    await requireAdmin("student.manage");
 
     const query = Object.fromEntries(request.nextUrl.searchParams.entries());
     const parsed = listAdminStudentsQuerySchema.safeParse(query);

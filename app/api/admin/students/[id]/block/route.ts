@@ -9,7 +9,7 @@ type RouteContext = {
 
 export async function POST(_request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("student.manage");
     const { id } = await context.params;
 
     const data = await blockStudent(id);

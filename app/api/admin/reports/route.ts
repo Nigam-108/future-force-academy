@@ -4,7 +4,7 @@ import { getAdminReports } from "@/server/services/student.service";
 
 export async function GET() {
   try {
-    await requireAdmin();
+    await requireAdmin("report.view");
 
     const data = await getAdminReports();
     return ok("Admin reports fetched successfully", data, 200);

@@ -19,7 +19,7 @@ type RouteContext = {
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin();
+    await requireAdmin("student.manage");
     const { id } = await context.params;
     const result = await getStudentPurchaseHistory(id);
     return ok("Student purchase history fetched successfully", result, 200);
