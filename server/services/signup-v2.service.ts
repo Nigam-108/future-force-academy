@@ -46,7 +46,10 @@ type SignupRuntimeSettings = {
   loginIdentifierMode: string;
   marketingEmailsOptInDefault: boolean;
   turnstileSuspiciousAttemptThreshold: number;
+  signupReviewMessage: string;
+  oneAccountWarningText: string;
 };
+
 
 const DEFAULT_SIGNUP_SETTINGS: SignupRuntimeSettings = {
   otpLength: 4,
@@ -63,7 +66,10 @@ const DEFAULT_SIGNUP_SETTINGS: SignupRuntimeSettings = {
   loginIdentifierMode: "EMAIL_OR_MOBILE",
   marketingEmailsOptInDefault: true,
   turnstileSuspiciousAttemptThreshold: 3,
+  signupReviewMessage: "Please review your details carefully before sending OTP.",
+  oneAccountWarningText: "Only one account is allowed per email and mobile number.",
 };
+
 
 function readPositiveInt(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
@@ -96,6 +102,13 @@ function resolveSignupRuntimeSettings(rawSettings: unknown): SignupRuntimeSettin
       settings.turnstileSuspiciousAttemptThreshold,
       DEFAULT_SIGNUP_SETTINGS.turnstileSuspiciousAttemptThreshold
     ),
+    signupReviewMessage: String(
+  settings.signupReviewMessage ?? DEFAULT_SIGNUP_SETTINGS.signupReviewMessage
+),
+oneAccountWarningText: String(
+  settings.oneAccountWarningText ?? DEFAULT_SIGNUP_SETTINGS.oneAccountWarningText
+),
+
   };
 }
 

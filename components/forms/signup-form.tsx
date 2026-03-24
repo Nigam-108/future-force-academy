@@ -34,6 +34,9 @@ type SignupConfigData = {
     loginIdentifierMode: string;
     marketingEmailsOptInDefault: boolean;
     turnstileSuspiciousAttemptThreshold: number;
+    signupReviewMessage: string;
+oneAccountWarningText: string;
+
   };
   policies: {
     terms: {
@@ -723,12 +726,15 @@ setOtpMessage("A fresh OTP has been sent to your email");
               </div>
 
               <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                <p className="text-sm font-medium text-amber-900">Before we send OTP</p>
-                <p className="mt-1 text-sm text-amber-800">
-                  Please review your email and mobile number carefully. Only one account is allowed
-                  per email and mobile number.
-                </p>
-              </div>
+  <p className="text-sm font-medium text-amber-900">Before we send OTP</p>
+  <p className="mt-1 text-sm text-amber-800">
+    {config.rules.signupReviewMessage}
+  </p>
+  <p className="mt-2 text-sm font-medium text-amber-900">
+    {config.rules.oneAccountWarningText}
+  </p>
+</div>
+
 
               <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <label className="flex items-start gap-3 text-sm text-slate-700">
