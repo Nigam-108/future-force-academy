@@ -1,23 +1,32 @@
-import { PageShell } from "@/components/shared/page-shell";
+import { PolicyType } from "@prisma/client";
+import { getPublicPolicyPageData } from "@/server/services/policy.service";
+import { PolicyContent } from "@/components/public/policy-content";
 
-export default function TermsPage() {
+export default async function TermsPage(props: {
+  searchParams?: Promise<{
+    version?: string;
+    versionId?: string;
+    updated?: string;
+    summary?: string;
+  }>;
+}) {
+  const searchParams = (await props.searchParams) ?? {};
+
+  const data = await getPublicPolicyPageData({
+    type: PolicyType.TERMS,
+    selectedVersionId: searchParams.versionId,
+    selectedVersionNumber: searchParams.version ? Number(searchParams.version) : undefined,
+  });
+
   return (
-    <PageShell title="Terms & Conditions" description="Basic placeholder terms page for first launch.">
-      <div className="rounded-3xl border bg-white p-8 shadow-sm">
-        <div className="prose max-w-none prose-slate">
-          <p>
-            By using the Future Force Academy platform, users agree to comply with platform rules,
-            account security practices, purchase terms, and test conduct guidelines.
-          </p>
-          <p>
-            Paid access, account sharing rules, test availability,
-            and administrative decisions regarding access control are subject to final platform policies.
-          </p>
-          <p>
-            This placeholder content should be replaced with final legal content before production launch.
-          </p>
-        </div>
+    <div className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl">
+        <PolicyContent
+          data={data}
+          updated={searchParams.updated === "1"}
+          updatedSummary={searchParams.summary}
+        />
       </div>
-    </PageShell>
+    </div>
   );
 }

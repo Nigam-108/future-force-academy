@@ -1,32 +1,32 @@
-import { PageShell } from "@/components/shared/page-shell";
+import { PolicyType } from "@prisma/client";
+import { getPublicPolicyPageData } from "@/server/services/policy.service";
+import { PolicyContent } from "@/components/public/policy-content";
 
-export default function RefundCancellationPolicyPage() {
+export default async function RefundCancellationPolicyPage(props: {
+  searchParams?: Promise<{
+    version?: string;
+    versionId?: string;
+    updated?: string;
+    summary?: string;
+  }>;
+}) {
+  const searchParams = (await props.searchParams) ?? {};
+
+  const data = await getPublicPolicyPageData({
+    type: PolicyType.REFUND_CANCELLATION,
+    selectedVersionId: searchParams.versionId,
+    selectedVersionNumber: searchParams.version ? Number(searchParams.version) : undefined,
+  });
+
   return (
-    <PageShell
-      title="Refund / Cancellation Policy"
-      description="Launch-phase refund and cancellation policy for Future Force Academy."
-    >
-      <div className="space-y-4 text-sm leading-7 text-slate-700">
-        <p>
-          This page contains the default published refund and cancellation policy for Future Force
-          Academy during the current launch phase.
-        </p>
-
-        <p>
-          Refund eligibility, cancellation timelines, and access-related conditions may vary by
-          product, batch, test series, or service type.
-        </p>
-
-        <p>
-          Future Force Academy may publish newer policy versions over time. Future signups and future
-          purchases may be governed by the latest applicable published version.
-        </p>
-
-        <p>
-          Important account and policy-related notices may still be sent by email even when optional
-          future update emails are turned off.
-        </p>
+    <div className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl">
+        <PolicyContent
+          data={data}
+          updated={searchParams.updated === "1"}
+          updatedSummary={searchParams.summary}
+        />
       </div>
-    </PageShell>
+    </div>
   );
 }

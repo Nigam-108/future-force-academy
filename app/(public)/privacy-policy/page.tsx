@@ -1,23 +1,32 @@
-import { PageShell } from "@/components/shared/page-shell";
+import { PolicyType } from "@prisma/client";
+import { getPublicPolicyPageData } from "@/server/services/policy.service";
+import { PolicyContent } from "@/components/public/policy-content";
 
-export default function PrivacyPolicyPage() {
+export default async function PrivacyPolicyPage(props: {
+  searchParams?: Promise<{
+    version?: string;
+    versionId?: string;
+    updated?: string;
+    summary?: string;
+  }>;
+}) {
+  const searchParams = (await props.searchParams) ?? {};
+
+  const data = await getPublicPolicyPageData({
+    type: PolicyType.PRIVACY,
+    selectedVersionId: searchParams.versionId,
+    selectedVersionNumber: searchParams.version ? Number(searchParams.version) : undefined,
+  });
+
   return (
-    <PageShell title="Privacy Policy" description="Basic placeholder privacy policy for first launch.">
-      <div className="rounded-3xl border bg-white p-8 shadow-sm">
-        <div className="prose max-w-none prose-slate">
-          <p>
-            Future Force Academy collects limited information required for account creation,
-            test access, purchases, and communication related to the platform.
-          </p>
-          <p>
-            User data such as name, email, mobile number, selected course, purchases,
-            and test activity may be stored for service delivery and account management.
-          </p>
-          <p>
-            This placeholder text should be replaced with the final legal policy before full public production use.
-          </p>
-        </div>
+    <div className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl">
+        <PolicyContent
+          data={data}
+          updated={searchParams.updated === "1"}
+          updatedSummary={searchParams.summary}
+        />
       </div>
-    </PageShell>
+    </div>
   );
 }
