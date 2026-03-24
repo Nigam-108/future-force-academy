@@ -94,15 +94,21 @@ model User {
   createdBatches Batch[] @relation("BatchCreatedBy")
 
   /// Batch memberships for student access grouping.
-  studentBatches StudentBatch[] @relation("StudentBatchMembership")
-  payments  Payment[]
-  purchases Purchase[]
-  couponUsages  CouponUsage[]
-  testPurchases TestPurchase[]
+  studentBatches         StudentBatch[]           @relation("StudentBatchMembership")
+  payments               Payment[]
+  purchases              Purchase[]
+  couponUsages           CouponUsage[]
+  testPurchases          TestPurchase[]
   /// Inside model User — add this line with other relations
-  permissionOverrides UserPermissionOverride[]
+  permissionOverrides    UserPermissionOverride[]
   // Inside model User — add with other relations
-activityLogs ActivityLog[]
+  activityLogs           ActivityLog[]
+  marketingEmailsEnabled Boolean                  @default(true)
+  emailVerifiedAt        DateTime?
+
+  policyConsents           UserPolicyConsent[]
+  passwordResetTokens      PasswordResetToken[]
+  signupVerificationAudits SignupVerificationAudit[] @relation("VerifiedUserAudits")
 }
 
 model Question {
@@ -250,35 +256,34 @@ enum BatchStatus {
 /// - group students by exam/program
 /// - later link tests, payments, content access, announcements, etc.
 model Batch {
-  id          String      @id @default(cuid())
-  title       String
-  slug        String      @unique
-  description String?
-  examType    ExamType
-  status      BatchStatus @default(DRAFT)
-  startDate   DateTime?
-  endDate     DateTime?
-  isPaid      Boolean     @default(false)
-  color       String      @default("#6366f1")
+  id            String         @id @default(cuid())
+  title         String
+  slug          String         @unique
+  description   String?
+  examType      ExamType
+  status        BatchStatus    @default(DRAFT)
+  startDate     DateTime?
+  endDate       DateTime?
+  isPaid        Boolean        @default(false)
+  color         String         @default("#6366f1")
   price         Int?
   originalPrice Int?
   offerEndDate  DateTime?
   coupons       Coupon[]
   testPurchases TestPurchase[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   /// If your User model already exists, this relation assumes:
   /// User.id is String and the admin user creates the batch.
   createdById String?
   createdBy   User?   @relation("BatchCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
-
   /// Junction relation to students.
   studentBatches StudentBatch[]
-  testBatches TestBatch[]
-  payments  Payment[]
-  purchases Purchase[]
+  testBatches    TestBatch[]
+  payments       Payment[]
+  purchases      Purchase[]
 }
 
 /// Junction table between student users and batches.
@@ -304,7 +309,7 @@ model TestBatch {
   testId     String
   batchId    String
   assignedAt DateTime @default(now())
-  price Int?
+  price      Int?
 
   test  Test  @relation(fields: [testId], references: [id], onDelete: Cascade)
   batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
@@ -361,21 +366,20 @@ model Payment {
   gatewayResponse Json?
   notes           String?
   paidAt          DateTime?
-  couponId       String?
-  discountAmount Int          @default(0)
-  originalAmount Int?
-  purchaseType   PurchaseType @default(FULL_BATCH)
+  couponId        String?
+  discountAmount  Int            @default(0)
+  originalAmount  Int?
+  purchaseType    PurchaseType   @default(FULL_BATCH)
 
-  coupon         Coupon?       @relation(fields: [couponId], references: [id], onDelete: SetNull)
-  couponUsage    CouponUsage?
-  testPurchases  TestPurchase[]
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  coupon        Coupon?        @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  couponUsage   CouponUsage?
+  testPurchases TestPurchase[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   batch     Batch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
   purchases Purchase[]
-
 }
 
 /// Records confirmed access granted to a student for a batch.
@@ -385,16 +389,16 @@ model Payment {
 ///
 /// One active Purchase per user+batch enforced by unique constraint.
 model Purchase {
-  id         String         @id @default(cuid())
-  userId     String
-  batchId    String
-  paymentId  String?
-  status     PurchaseStatus @default(ACTIVE)
-  validFrom  DateTime       @default(now())
-  validUntil DateTime?
-  purchaseType PurchaseType @default(FULL_BATCH)
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+  id           String         @id @default(cuid())
+  userId       String
+  batchId      String
+  paymentId    String?
+  status       PurchaseStatus @default(ACTIVE)
+  validFrom    DateTime       @default(now())
+  validUntil   DateTime?
+  purchaseType PurchaseType   @default(FULL_BATCH)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   batch   Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
@@ -467,9 +471,9 @@ model TestPurchase {
 
 model Permission {
   id          String  @id @default(cuid())
-  key         String  @unique  // e.g. "question.manage", "payment.view"
-  label       String           // Human readable: "Manage Questions"
-  description String?          // What this permission allows
+  key         String  @unique // e.g. "question.manage", "payment.view"
+  label       String // Human readable: "Manage Questions"
+  description String? // What this permission allows
 
   rolePermissions RolePermission[]
   userOverrides   UserPermissionOverride[]
@@ -489,10 +493,10 @@ model RolePermission {
 
 /// Per-user overrides — admin can grant/revoke specific permissions for a sub-admin
 model UserPermissionOverride {
-  id           String   @id @default(cuid())
+  id           String  @id @default(cuid())
   userId       String
   permissionId String
-  granted      Boolean  // true = explicitly granted, false = explicitly revoked
+  granted      Boolean // true = explicitly granted, false = explicitly revoked
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -508,32 +512,249 @@ model UserPermissionOverride {
 // Logged automatically via logActivity() in service layer
 // ADMIN and SUB_ADMIN actions both get logged
 model ActivityLog {
-  id           String   @id @default(cuid())
+  id String @id @default(cuid())
 
   // Who did the action
   userId       String
-  userFullName String   // Denormalized — so logs survive if user is deleted
+  userFullName String // Denormalized — so logs survive if user is deleted
 
   // What they did
-  action       String   // e.g. "question.created", "batch.status_changed"
-  description  String   // Human readable: "Created question: Newton's Laws Q1"
+  action      String // e.g. "question.created", "batch.status_changed"
+  description String // Human readable: "Created question: Newton's Laws Q1"
 
   // What resource was affected (optional but useful)
-  resourceType String?  // e.g. "question", "test", "batch", "student"
-  resourceId   String?  // The actual cuid of the affected record
+  resourceType String? // e.g. "question", "test", "batch", "student"
+  resourceId   String? // The actual cuid of the affected record
 
   // Extra metadata — JSON blob for flexible extra info
-  metadata     Json?    // e.g. { "from": "DRAFT", "to": "ACTIVE" }
+  metadata Json? // e.g. { "from": "DRAFT", "to": "ACTIVE" }
 
   // Request context
-  ipAddress    String?  // Optional — for security audit
+  ipAddress String? // Optional — for security audit
 
-  createdAt    DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([action])
   @@index([resourceType, resourceId])
   @@index([createdAt])
+}
+
+model PolicyDocument {
+  id          String     @id @default(cuid())
+  type        PolicyType @unique
+  slug        String     @unique
+  title       String
+  description String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  versions PolicyVersion[]
+}
+
+model PolicyVersion {
+  id              String               @id @default(cuid())
+  documentId      String
+  versionNumber   Int
+  status          ContentVersionStatus @default(DRAFT)
+  title           String
+  summary         String?
+  contentMarkdown String
+  publishedAt     DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  document PolicyDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  userConsents             UserPolicyConsent[]
+  pendingTermsForSignups   PendingSignup[]     @relation("PendingSignupTermsPolicyVersion")
+  pendingPrivacyForSignups PendingSignup[]     @relation("PendingSignupPrivacyPolicyVersion")
+  pendingRefundForSignups  PendingSignup[]     @relation("PendingSignupRefundPolicyVersion")
+
+  @@unique([documentId, versionNumber])
+  @@index([documentId, status])
+  @@index([publishedAt])
+}
+
+model SignupSettingsVersion {
+  id            String               @id @default(cuid())
+  versionNumber Int                  @unique
+  status        ContentVersionStatus @default(DRAFT)
+  title         String
+  summary       String?
+  settings      Json
+  publishedAt   DateTime?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  pendingSignups     PendingSignup[]
+  verificationAudits SignupVerificationAudit[]
+
+  @@index([status, publishedAt])
+}
+
+model PendingSignup {
+  id                     String  @id @default(cuid())
+  firstName              String
+  lastName               String?
+  email                  String
+  normalizedEmail        String  @unique
+  mobileNumber           String
+  normalizedMobileNumber String  @unique
+  passwordHash           String
+
+  marketingEmailsEnabled   Boolean   @default(true)
+  termsAcceptedAt          DateTime
+  privacyAcceptedAt        DateTime
+  refundPolicyAcceptedAt   DateTime
+  singleAccountConfirmed   Boolean   @default(false)
+  singleAccountConfirmedAt DateTime?
+
+  signupSettingsVersionId String
+  signupSettingsSnapshot  Json
+
+  termsPolicyVersionId   String
+  privacyPolicyVersionId String
+  refundPolicyVersionId  String
+  policyConsentSnapshot  Json
+
+  otpHash            String?
+  otpExpiresAt       DateTime?
+  otpLastSentAt      DateTime?
+  otpSendCount       Int       @default(0)
+  otpResendCount     Int       @default(0)
+  otpWindowStartedAt DateTime?
+  wrongOtpCount      Int       @default(0)
+  verifyBlockedUntil DateTime?
+  resendBlockedUntil DateTime?
+
+  turnstileRequired   Boolean   @default(false)
+  turnstileVerifiedAt DateTime?
+
+  sourceContext String?
+  ipAddress     String?
+  userAgent     String?
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  signupSettingsVersion SignupSettingsVersion @relation(fields: [signupSettingsVersionId], references: [id], onDelete: Restrict)
+  termsPolicyVersion    PolicyVersion         @relation("PendingSignupTermsPolicyVersion", fields: [termsPolicyVersionId], references: [id], onDelete: Restrict)
+  privacyPolicyVersion  PolicyVersion         @relation("PendingSignupPrivacyPolicyVersion", fields: [privacyPolicyVersionId], references: [id], onDelete: Restrict)
+  refundPolicyVersion   PolicyVersion         @relation("PendingSignupRefundPolicyVersion", fields: [refundPolicyVersionId], references: [id], onDelete: Restrict)
+
+  authAttempts       AuthAttempt[]
+  verificationAudits SignupVerificationAudit[]
+
+  @@index([normalizedEmail])
+  @@index([normalizedMobileNumber])
+  @@index([expiresAt])
+  @@index([resendBlockedUntil])
+  @@index([verifyBlockedUntil])
+}
+
+model SignupVerificationAudit {
+  id                      String   @id @default(cuid())
+  pendingSignupId         String?
+  email                   String
+  mobileNumber            String
+  firstName               String
+  lastName                String?
+  createdUserId           String
+  signupSettingsVersionId String?
+  policyConsentSnapshot   Json?
+  verifiedAt              DateTime @default(now())
+  ipAddress               String?
+  userAgent               String?
+  createdAt               DateTime @default(now())
+
+  pendingSignup         PendingSignup?         @relation(fields: [pendingSignupId], references: [id], onDelete: SetNull)
+  createdUser           User                   @relation("VerifiedUserAudits", fields: [createdUserId], references: [id], onDelete: Cascade)
+  signupSettingsVersion SignupSettingsVersion? @relation(fields: [signupSettingsVersionId], references: [id], onDelete: SetNull)
+
+  @@index([createdUserId])
+  @@index([email])
+  @@index([verifiedAt])
+}
+
+model UserPolicyConsent {
+  id              String     @id @default(cuid())
+  userId          String
+  policyVersionId String
+  policyType      PolicyType
+  acceptedAt      DateTime   @default(now())
+  sourceContext   String?
+  snapshot        Json?
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  policyVersion PolicyVersion @relation(fields: [policyVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, policyVersionId])
+  @@index([policyType, acceptedAt])
+}
+
+model AuthAttempt {
+  id              String            @id @default(cuid())
+  type            AuthAttemptType
+  status          AuthAttemptStatus
+  pendingSignupId String?
+  email           String?
+  mobileNumber    String?
+  ipAddress       String?
+  userAgent       String?
+  reason          String?
+  metadata        Json?
+  createdAt       DateTime          @default(now())
+
+  pendingSignup PendingSignup? @relation(fields: [pendingSignupId], references: [id], onDelete: SetNull)
+
+  @@index([type, createdAt])
+  @@index([status, createdAt])
+  @@index([email, createdAt])
+  @@index([mobileNumber, createdAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([tokenHash])
+}
+
+enum ContentVersionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum PolicyType {
+  TERMS
+  PRIVACY
+  REFUND_CANCELLATION
+}
+
+enum AuthAttemptType {
+  SIGNUP_AVAILABILITY
+  SIGNUP_START
+  SIGNUP_CONTINUE
+  SIGNUP_RESEND
+  SIGNUP_VERIFY
+  LOGIN
+  PASSWORD_RESET_REQUEST
+}
+
+enum AuthAttemptStatus {
+  SUCCESS
+  FAILED
+  BLOCKED
 }
