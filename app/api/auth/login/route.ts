@@ -3,6 +3,7 @@ import { loginSchema } from "@/server/validations/auth.schema";
 import { fail, ok } from "@/server/utils/api-response";
 import { loginUser } from "@/server/services/auth.service";
 import { setSessionCookie } from "@/server/auth/cookies";
+import { AppError } from "@/server/utils/errors";
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,6 +20,8 @@ export async function POST(request: NextRequest) {
     return ok("Login successful", user, 200);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Login failed";
-    return fail(message, 400);
+    const statusCode = error instanceof AppError ? error.statusCode : 400;
+
+    return fail(message, statusCode);
   }
 }

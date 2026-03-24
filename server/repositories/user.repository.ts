@@ -6,6 +6,12 @@ export async function findUserByEmail(email: string) {
   });
 }
 
+export async function findUserByMobileNumber(mobileNumber: string) {
+  return prisma.user.findFirst({
+    where: { mobileNumber },
+  });
+}
+
 export async function findUserById(id: string) {
   return prisma.user.findUnique({
     where: { id },

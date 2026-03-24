@@ -1,7 +1,22 @@
 import { comparePassword, hashPassword } from "@/server/auth/password";
 import { AppError } from "@/server/utils/errors";
-import { createUser, findUserByEmail, findUserById } from "@/server/repositories/user.repository";
+import {
+  createUser,
+  findUserByEmail,
+  findUserById,
+  findUserByMobileNumber,
+} from "@/server/repositories/user.repository";
 import { signSessionToken } from "@/server/auth/jwt";
+import {
+  isValidEmailFormat,
+  isValidIndianMobileNumber,
+  normalizeEmail,
+  normalizeMobileNumber,
+} from "@/server/utils/auth-normalizers";
+import {
+  findPendingSignupByNormalizedEmail,
+  findPendingSignupByNormalizedMobileNumber,
+} from "@/server/repositories/signup-v2.repository";
 
 export async function signupUser(input: {
   fullName: string;
@@ -33,17 +48,57 @@ export async function signupUser(input: {
   return { user, token };
 }
 
-export async function loginUser(input: { email: string; password: string }) {
-  const user = await findUserByEmail(input.email);
+function resolveLoginIdentifier(identifier: string) {
+  const raw = identifier.trim();
+
+  const normalizedMobileNumber = normalizeMobileNumber(raw);
+  if (isValidIndianMobileNumber(normalizedMobileNumber)) {
+    return {
+      type: "mobile" as const,
+      value: normalizedMobileNumber,
+    };
+  }
+
+  const normalizedEmail = normalizeEmail(raw);
+  if (isValidEmailFormat(normalizedEmail)) {
+    return {
+      type: "email" as const,
+      value: normalizedEmail,
+    };
+  }
+
+  throw new AppError("Enter a valid email or 10-digit mobile number", 422);
+}
+
+export async function loginUser(input: { identifier: string; password: string }) {
+  const resolved = resolveLoginIdentifier(input.identifier);
+  const now = Date.now();
+
+  const pendingSignup =
+    resolved.type === "email"
+      ? await findPendingSignupByNormalizedEmail(resolved.value)
+      : await findPendingSignupByNormalizedMobileNumber(resolved.value);
+
+  if (pendingSignup && pendingSignup.expiresAt.getTime() > now) {
+    throw new AppError(
+      "Account not created yet. Complete email verification first.",
+      409
+    );
+  }
+
+  const user =
+    resolved.type === "email"
+      ? await findUserByEmail(resolved.value)
+      : await findUserByMobileNumber(resolved.value);
 
   if (!user) {
-    throw new AppError("Invalid email or password", 401);
+    throw new AppError("Invalid email/mobile or password", 401);
   }
 
   const isPasswordValid = await comparePassword(input.password, user.passwordHash);
 
   if (!isPasswordValid) {
-    throw new AppError("Invalid email or password", 401);
+    throw new AppError("Invalid email/mobile or password", 401);
   }
 
   if (user.status === "BLOCKED") {
