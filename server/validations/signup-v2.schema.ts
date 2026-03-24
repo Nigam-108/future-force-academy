@@ -45,7 +45,11 @@ export const signupStartSchema = z
   .refine((value) => value.password === value.confirmPassword, {
     message: "Passwords do not match",
     path: ["confirmPassword"],
+  })
+  .extend({
+    turnstileToken: z.string().trim().optional().or(z.literal("")),
   });
+  
 
 export const continueVerificationSchema = z.object({
   email: z.string().trim().email(),
@@ -60,4 +64,17 @@ export const verifySignupOtpSchema = z.object({
   otp: z.string().trim().regex(/^\d{4}$/, {
     message: "OTP must be a 4-digit number",
   }),
+})
+.extend({
+  turnstileToken: z.string().trim().optional().or(z.literal("")),
 });
+
+export const signupSecurityRequirementSchema = z
+  .object({
+    email: z.string().trim().email().optional(),
+    mobileNumber: z.string().trim().optional(),
+  })
+  .refine((value) => Boolean(value.email || value.mobileNumber), {
+    message: "Email or mobile number is required",
+    path: ["email"],
+  });

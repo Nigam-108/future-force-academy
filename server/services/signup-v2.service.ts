@@ -24,6 +24,12 @@ import {
   updatePendingSignup,
 } from "@/server/repositories/signup-v2.repository";
 import { sendSignupOtpEmail } from "@/server/services/signup-email.service";
+import {
+  assertSignupTurnstileOrThrow,
+  getSignupSecurityPublicConfig,
+} from "@/server/services/signup-security.service";
+import { AuthAttemptType } from "@prisma/client";
+
 
 export type SignupRequestContext = {
   ipAddress?: string;
@@ -197,41 +203,44 @@ function isPendingExpired(pendingSignup: PendingSignupWithRelations, now: Date) 
 export async function getSignupPublicConfig() {
   const { signupSettingsVersion, policies, settings } = await getPublishedSignupFoundationOrThrow();
 
-  return {
-    signupSettingsVersion: {
-      id: signupSettingsVersion.id,
-      versionNumber: signupSettingsVersion.versionNumber,
-      title: signupSettingsVersion.title,
-      summary: signupSettingsVersion.summary,
+  const security = await getSignupSecurityPublicConfig();
+
+return {
+  signupSettingsVersion: {
+    id: signupSettingsVersion.id,
+    versionNumber: signupSettingsVersion.versionNumber,
+    title: signupSettingsVersion.title,
+    summary: signupSettingsVersion.summary,
+  },
+  rules: settings,
+  security,
+  policies: {
+    terms: {
+      documentType: policies.terms.document.type,
+      documentSlug: policies.terms.document.slug,
+      versionId: policies.terms.id,
+      versionNumber: policies.terms.versionNumber,
+      title: policies.terms.title,
+      summary: policies.terms.summary,
     },
-    rules: settings,
-    policies: {
-      terms: {
-        documentType: policies.terms.document.type,
-        documentSlug: policies.terms.document.slug,
-        versionId: policies.terms.id,
-        versionNumber: policies.terms.versionNumber,
-        title: policies.terms.title,
-        summary: policies.terms.summary,
-      },
-      privacy: {
-        documentType: policies.privacy.document.type,
-        documentSlug: policies.privacy.document.slug,
-        versionId: policies.privacy.id,
-        versionNumber: policies.privacy.versionNumber,
-        title: policies.privacy.title,
-        summary: policies.privacy.summary,
-      },
-      refund: {
-        documentType: policies.refund.document.type,
-        documentSlug: policies.refund.document.slug,
-        versionId: policies.refund.id,
-        versionNumber: policies.refund.versionNumber,
-        title: policies.refund.title,
-        summary: policies.refund.summary,
-      },
+    privacy: {
+      documentType: policies.privacy.document.type,
+      documentSlug: policies.privacy.document.slug,
+      versionId: policies.privacy.id,
+      versionNumber: policies.privacy.versionNumber,
+      title: policies.privacy.title,
+      summary: policies.privacy.summary,
     },
-  };
+    refund: {
+      documentType: policies.refund.document.type,
+      documentSlug: policies.refund.document.slug,
+      versionId: policies.refund.id,
+      versionNumber: policies.refund.versionNumber,
+      title: policies.refund.title,
+      summary: policies.refund.summary,
+    },
+  },
+};
 }
 
 export async function checkSignupAvailability(input: {
@@ -329,13 +338,14 @@ export async function checkSignupAvailability(input: {
 
 export async function startSignup(
   input: {
-    firstName: string;
-    lastName?: string | null;
-    email: string;
-    mobileNumber: string;
-    password: string;
-    marketingEmailsEnabled?: boolean;
-  },
+  firstName: string;
+  lastName?: string | null;
+  email: string;
+  mobileNumber: string;
+  password: string;
+  marketingEmailsEnabled?: boolean;
+  turnstileToken?: string;
+},
   context: SignupRequestContext
 ) {
   const now = new Date();
@@ -375,6 +385,16 @@ export async function startSignup(
 
     throw new AppError("This mobile number is already registered", 409);
   }
+
+  await assertSignupTurnstileOrThrow({
+  email: normalizedEmail,
+  mobileNumber: normalizedMobileNumber,
+  turnstileToken: input.turnstileToken,
+  ipAddress: context.ipAddress,
+  userAgent: context.userAgent,
+  actionType: AuthAttemptType.SIGNUP_START,
+});
+
 
   const emailPending = await findPendingSignupByNormalizedEmail(normalizedEmail);
   const mobilePending = await findPendingSignupByNormalizedMobileNumber(normalizedMobileNumber);
@@ -598,7 +618,7 @@ export async function continuePendingSignup(
 }
 
 export async function resendSignupOtp(
-  input: { email: string },
+  input: { email: string; turnstileToken?: string },
   context: SignupRequestContext
 ) {
   const normalizedEmail = normalizeEmail(input.email);
@@ -633,6 +653,16 @@ export async function resendSignupOtp(
 
     throw new AppError("Resend limit reached. Please try again after 30 minutes.", 429);
   }
+
+  await assertSignupTurnstileOrThrow({
+  email: normalizedEmail,
+  mobileNumber: pendingSignup?.normalizedMobileNumber,
+  turnstileToken: input.turnstileToken,
+  ipAddress: context.ipAddress,
+  userAgent: context.userAgent,
+  actionType: AuthAttemptType.SIGNUP_RESEND,
+});
+
 
   if (
     pendingSignup.otpLastSentAt &&

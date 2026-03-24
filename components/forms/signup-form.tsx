@@ -1,9 +1,9 @@
 "use client";
-
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { OtpInput } from "@/components/forms/otp-input";
+import { TurnstileWidget } from "@/components/forms/turnstile-widget";
 
 type ApiResponse<T> = {
   success: boolean;
@@ -35,9 +35,15 @@ type SignupConfigData = {
     marketingEmailsOptInDefault: boolean;
     turnstileSuspiciousAttemptThreshold: number;
     signupReviewMessage: string;
-oneAccountWarningText: string;
-
+    oneAccountWarningText: string;
+    
   };
+  security: {
+  turnstileEnabled: boolean;
+  turnstileSiteKey: string;
+  suspiciousWindowMinutes: number;
+  suspiciousThresh01d: number;
+  }
   policies: {
     terms: {
       versionId: string;
@@ -80,6 +86,15 @@ type SignupOtpMeta = {
   resendAvailableAt: string | null;
   resendBlockedUntil?: string | null;
   pendingExpiresAt: string | null;
+};
+
+type SignupSecurityData = {
+  turnstileEnabled: boolean;
+  turnstileSiteKey: string;
+  turnstileRequired: boolean;
+  recentAttemptCount: number;
+  suspiciousWindowMinutes: number;
+  suspiciousThreshold: number;
 };
 
 type SignupVerifyData = {
@@ -186,6 +201,11 @@ export function SignupForm() {
   const [otpMessage, setOtpMessage] = useState("");
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [isResendingOtp, setIsResendingOtp] = useState(false);
+  const [turnstileRequired, setTurnstileRequired] = useState(false);
+const [turnstileToken, setTurnstileToken] = useState("");
+const [turnstileError, setTurnstileError] = useState("");
+const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+
 
   const normalizedEmail = useMemo(() => normalizeEmail(form.email), [form.email]);
   const normalizedMobileNumber = useMemo(
@@ -230,6 +250,8 @@ if (!response.ok || !result.success || !result.data) {
 const configData = result.data;
 
 if (!isMounted) return;
+
+
 
 setConfig(configData);
 setForm((previous) => ({
@@ -304,6 +326,36 @@ if (availabilityData.email.status === "PENDING") {
   }, [normalizedEmail, normalizedMobileNumber, step]);
 
   useEffect(() => {
+  const timer = window.setTimeout(() => {
+    if (step === "details") {
+      const email = validateEmail(normalizedEmail) ? normalizedEmail : undefined;
+      const mobileNumber = validateIndianMobile(normalizedMobileNumber)
+        ? normalizedMobileNumber
+        : undefined;
+
+      if (email || mobileNumber) {
+        refreshSignupSecurityRequirement({ email, mobileNumber });
+      }
+    }
+
+    if (step === "otp" && verificationEmail) {
+      refreshSignupSecurityRequirement({ email: verificationEmail });
+    }
+  }, 500);
+
+  return () => {
+    window.clearTimeout(timer);
+  };
+}, [
+  step,
+  normalizedEmail,
+  normalizedMobileNumber,
+  verificationEmail,
+  config?.security.turnstileEnabled
+]);
+
+
+  useEffect(() => {
     if (step !== "otp") return;
 
     const interval = window.setInterval(() => {
@@ -364,6 +416,40 @@ if (availabilityData.email.status === "PENDING") {
     return errors;
   }
 
+  async function refreshSignupSecurityRequirement(input: {
+  email?: string;
+  mobileNumber?: string;
+}) {
+  if (!config?.security.turnstileEnabled) {
+    setTurnstileRequired(false);
+    return;
+  }
+
+  const response = await fetch("/api/auth/signup/security-requirement", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  const result = await parseApiResponse<SignupSecurityData>(response);
+
+  if (!response.ok || !result.success || !result.data) {
+    return;
+  }
+
+  const securityData = result.data;
+
+  setTurnstileRequired(securityData.turnstileRequired);
+
+  if (!securityData.turnstileRequired) {
+    setTurnstileToken("");
+    setTurnstileError("");
+  }
+}
+
+
   async function handleStartSignup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -387,6 +473,12 @@ if (availabilityData.email.status === "PENDING") {
       return;
     }
 
+    if (turnstileRequired && !turnstileToken) {
+  setFormMessage("Complete the security check before sending OTP.");
+  return;
+}
+
+
     try {
       setIsSubmitting(true);
 
@@ -405,6 +497,7 @@ if (availabilityData.email.status === "PENDING") {
           acceptPolicies: form.acceptPolicies,
           confirmSingleAccount: form.confirmSingleAccount,
           marketingEmailsEnabled: form.marketingEmailsEnabled,
+            turnstileToken,
         }),
       });
 
@@ -418,8 +511,17 @@ if (!response.ok || !result.success || !result.data) {
     setContinueEmail(normalizedEmail);
   }
 
+  if (
+    message.toLowerCase().includes("security check required") ||
+    message.toLowerCase().includes("security verification failed")
+  ) {
+    setTurnstileToken("");
+    setTurnstileResetKey((value) => value + 1);
+  }
+
   return;
 }
+
 
 const signupOtpData = result.data;
 
@@ -429,6 +531,9 @@ setStep("otp");
 setOtpValue("");
 setFormSuccess("Verification code sent successfully");
 setFormMessage("");
+setTurnstileToken("");
+setTurnstileResetKey((value) => value + 1);
+
     } catch {
       setFormMessage("Something went wrong while starting signup.");
     } finally {
@@ -533,6 +638,11 @@ setContinueMessage("Pending verification loaded successfully");
     setOtpError("");
     setOtpMessage("");
 
+if (turnstileRequired && !turnstileToken) {
+  setOtpError("Complete the security check before resending OTP.");
+  return;
+}
+
     try {
       setIsResendingOtp(true);
 
@@ -542,8 +652,10 @@ setContinueMessage("Pending verification loaded successfully");
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email: verificationEmail,
-        }),
+  email: verificationEmail,
+  turnstileToken,
+}),
+
       });
 
       const result = await parseApiResponse<SignupOtpMeta>(response);
@@ -558,6 +670,9 @@ const resendOtpData = result.data;
 setOtpMeta(resendOtpData);
 setOtpValue("");
 setOtpMessage("A fresh OTP has been sent to your email");
+setTurnstileToken("");
+setTurnstileResetKey((value) => value + 1);
+
     } catch {
       setOtpError("Something went wrong while resending OTP.");
     } finally {
@@ -736,6 +851,7 @@ setOtpMessage("A fresh OTP has been sent to your email");
 </div>
 
 
+
               <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <label className="flex items-start gap-3 text-sm text-slate-700">
                   <input
@@ -811,6 +927,28 @@ setOtpMessage("A fresh OTP has been sent to your email");
                   {formSuccess}
                 </div>
               ) : null}
+
+              {config.security.turnstileEnabled && turnstileRequired ? (
+  <TurnstileWidget
+    siteKey={config.security.turnstileSiteKey}
+    visible
+    resetKey={turnstileResetKey}
+    onTokenChange={(token) => {
+      setTurnstileToken(token);
+      setTurnstileError("");
+    }}
+    onError={(message) => {
+      setTurnstileError(message);
+    }}
+  />
+) : null}
+
+{turnstileError ? (
+  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+    {turnstileError}
+  </div>
+) : null}
+
 
               <button
                 type="submit"
@@ -907,6 +1045,27 @@ setOtpMessage("A fresh OTP has been sent to your email");
                   Edit details
                 </button>
               </div>
+                {config.security.turnstileEnabled && turnstileRequired ? (
+  <TurnstileWidget
+    siteKey={config.security.turnstileSiteKey}
+    visible
+    resetKey={turnstileResetKey}
+    onTokenChange={(token) => {
+      setTurnstileToken(token);
+      setTurnstileError("");
+      setOtpError("");
+    }}
+    onError={(message) => {
+      setTurnstileError(message);
+    }}
+  />
+) : null}
+
+{turnstileError ? (
+  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+    {turnstileError}
+  </div>
+) : null}
 
               <div className="rounded-2xl border border-slate-200 p-4">
                 <p className="text-sm font-medium text-slate-900">Didn’t receive the OTP?</p>
