@@ -38,3 +38,10 @@ export async function createUser(data: {
     },
   });
 }
+
+export async function updateUserPassword(userId: string, passwordHash: string) {
+  return prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash },
+  });
+}

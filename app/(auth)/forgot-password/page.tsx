@@ -1,29 +1,30 @@
-import { PageShell } from "@/components/shared/page-shell";
+import Link from "next/link";
+import { ForgotPasswordForm } from "@/components/forms/forgot-password-form";
 
 export default function ForgotPasswordPage() {
   return (
-    <PageShell title="Forgot Password" description="Reset your password using your registered email and verification flow.">
-      <div className="mx-auto max-w-md rounded-3xl border bg-white p-8 shadow-sm">
-        <form className="space-y-4">
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">Registered Email</label>
-            <input className="w-full rounded-xl border px-4 py-3" placeholder="Enter your email" />
-          </div>
+    <div className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-3xl">
+        <div className="mb-8 text-center">
+          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-blue-600">
+            Future Force Academy
+          </p>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900">
+            Forgot Password
+          </h1>
+          <p className="mt-3 text-sm text-slate-600">
+            Reset your password securely using an email OTP.
+          </p>
+          <p className="mt-4 text-sm text-slate-600">
+            Remembered your password?{" "}
+            <Link href="/login" className="font-medium text-blue-600 underline">
+              Back to Login
+            </Link>
+          </p>
+        </div>
 
-          <button className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700">
-            Send Reset OTP / Link
-          </button>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">New Password</label>
-            <input type="password" className="w-full rounded-xl border px-4 py-3" placeholder="Enter new password" />
-          </div>
-
-          <button className="w-full rounded-xl border px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-            Update Password
-          </button>
-        </form>
+        <ForgotPasswordForm />
       </div>
-    </PageShell>
+    </div>
   );
 }
