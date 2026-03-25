@@ -6,18 +6,20 @@ import { formatAmountFromPaise } from "@/server/repositories/payment.repository"
 
 function getStatusCode(error: unknown) {
   if (error instanceof AppError) return error.statusCode;
+
   if (error instanceof Error) {
     if (error.message === "Unauthorized") return 401;
     if (error.message === "Forbidden") return 403;
   }
+
   return 400;
 }
 
 /**
  * GET /api/student/batches/available
  *
- * Returns ACTIVE paid batches the student is NOT yet enrolled in.
- * Includes pricing, test list with individual prices, offer details.
+ * Returns ACTIVE batches the student is NOT yet enrolled in.
+ * Includes both paid and free batches.
  */
 export async function GET() {
   try {
@@ -27,14 +29,16 @@ export async function GET() {
       return fail("Only students can view available batches", 403);
     }
 
-    // Get batch IDs student already has access to
     const [studentBatches, activePurchases] = await Promise.all([
       prisma.studentBatch.findMany({
         where: { studentId: session.userId },
         select: { batchId: true },
       }),
       prisma.purchase.findMany({
-        where: { userId: session.userId, status: "ACTIVE" },
+        where: {
+          userId: session.userId,
+          status: "ACTIVE",
+        },
         select: { batchId: true },
       }),
     ]);
@@ -44,11 +48,11 @@ export async function GET() {
       ...activePurchases.map((p) => p.batchId),
     ]);
 
-    // Find active paid batches NOT enrolled
+    // IMPORTANT CHANGE:
+    // removed isPaid: true so free batches also appear
     const availableBatches = await prisma.batch.findMany({
       where: {
         status: "ACTIVE",
-        isPaid: true,
         id: { notIn: Array.from(enrolledBatchIds) },
       },
       select: {
@@ -85,8 +89,8 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     });
 
-    // Also get tests student already purchased individually in these batches
     const batchIds = availableBatches.map((b) => b.id);
+
     const existingTestPurchases =
       batchIds.length > 0
         ? await prisma.testPurchase.findMany({
@@ -95,7 +99,10 @@ export async function GET() {
               batchId: { in: batchIds },
               status: "ACTIVE",
             },
-            select: { testId: true, batchId: true },
+            select: {
+              testId: true,
+              batchId: true,
+            },
           })
         : [];
 
@@ -116,21 +123,20 @@ export async function GET() {
           durationInMinutes: tb.test.durationInMinutes,
           price: tb.price ?? 0,
           priceFormatted:
-            tb.price && tb.price > 0
-              ? formatAmountFromPaise(tb.price)
-              : "Free",
+            tb.price && tb.price > 0 ? formatAmountFromPaise(tb.price) : "Free",
           isFree: !tb.price || tb.price === 0,
           alreadyPurchased: purchasedTestIds.has(tb.test.id),
         }));
 
       const paidTests = liveTests.filter((t) => !t.isFree && !t.alreadyPurchased);
+
       const totalIndividualPricePaise = paidTests.reduce(
         (sum, t) => sum + t.price,
         0
       );
 
       const discountPercent =
-        batch.price != null && batch.originalPrice != null
+        batch.price != null && batch.originalPrice != null && batch.originalPrice > 0
           ? Math.round(
               ((batch.originalPrice - batch.price) / batch.originalPrice) * 100
             )
@@ -143,16 +149,19 @@ export async function GET() {
         examType: batch.examType,
         description: batch.description,
         isPaid: batch.isPaid,
-        price: batch.price,
-        originalPrice: batch.originalPrice,
-        offerEndDate: batch.offerEndDate,
-        priceFormatted:
-          batch.price != null ? formatAmountFromPaise(batch.price) : null,
+        price: batch.isPaid ? batch.price : 0,
+        originalPrice: batch.isPaid ? batch.originalPrice : null,
+        offerEndDate: batch.isPaid ? batch.offerEndDate : null,
+        priceFormatted: batch.isPaid
+          ? batch.price != null
+            ? formatAmountFromPaise(batch.price)
+            : null
+          : "Free",
         originalPriceFormatted:
-          batch.originalPrice != null
+          batch.isPaid && batch.originalPrice != null
             ? formatAmountFromPaise(batch.originalPrice)
             : null,
-        discountPercent,
+        discountPercent: batch.isPaid ? discountPercent : null,
         liveTests,
         totalTests: liveTests.length,
         paidTestCount: paidTests.length,
@@ -167,9 +176,7 @@ export async function GET() {
     return ok("Available batches fetched successfully", result, 200);
   } catch (error) {
     return fail(
-      error instanceof Error
-        ? error.message
-        : "Failed to fetch available batches",
+      error instanceof Error ? error.message : "Failed to fetch available batches",
       getStatusCode(error)
     );
   }
