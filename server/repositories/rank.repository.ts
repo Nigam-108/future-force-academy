@@ -89,7 +89,47 @@ export async function getRanksForStudentTest(
   });
 
   // Global test — no batch rank to show
-  if (testBatches.length === 0) return [];
+  if (testBatches.length === 0) {
+  const myAttempt = await prisma.testAttempt.findUnique({
+    where: {
+      testId_userId: { testId, userId },
+    },
+    select: {
+      totalMarksObtained: true,
+      status: true,
+    },
+  });
+
+  if (!myAttempt || myAttempt.status !== "SUBMITTED") return [];
+
+  const myScore = myAttempt.totalMarksObtained ?? 0;
+
+  const [higherCount, totalAttempted] = await Promise.all([
+    prisma.testAttempt.count({
+      where: {
+        testId,
+        status: "SUBMITTED",
+        totalMarksObtained: { gt: myScore },
+      },
+    }),
+    prisma.testAttempt.count({
+      where: {
+        testId,
+        status: "SUBMITTED",
+      },
+    }),
+  ]);
+
+  return [
+    {
+      batchId: "global",
+      batchTitle: "Overall Rank",
+      rank: higherCount + 1,
+      totalAttempted,
+      myScore,
+    },
+  ];
+}
 
   const batchIds = testBatches.map((tb) => tb.batchId);
 
