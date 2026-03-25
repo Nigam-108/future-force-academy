@@ -1,4 +1,8 @@
-import { TestMode, TestVisibilityStatus } from "@prisma/client";
+import {
+  TestMode,
+  TestStructureType,
+  TestVisibilityStatus,
+} from "@prisma/client";
 import { AppError } from "@/server/utils/errors";
 import {
   createTestRecord,
@@ -22,9 +26,6 @@ import type {
   StudentTestStatus,
 } from "@/server/validations/student-test.schema";
 
-/**
- * Converts any title into a slug-safe format.
- */
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -34,9 +35,6 @@ function slugify(value: string) {
     .replace(/-+/g, "-");
 }
 
-/**
- * Builds a unique slug by appending -copy, -copy-2, etc.
- */
 async function buildUniqueDuplicateSlug(baseTitle: string) {
   const baseSlug = slugify(baseTitle);
   let candidate = `${baseSlug}-copy`;
@@ -70,19 +68,19 @@ export async function createTest(input: CreateTestInput, actorId: string) {
     durationInMinutes: input.durationInMinutes,
     startAt: input.startAt ? new Date(input.startAt) : undefined,
     endAt: input.endAt ? new Date(input.endAt) : undefined,
+    sections:
+      input.structureType === "SECTIONAL"
+        ? input.sections.map((section) => ({
+            title: section.title,
+            displayOrder: section.displayOrder,
+            durationInMinutes: section.durationInMinutes,
+          }))
+        : [],
   });
 }
 
 export async function listTests(input: ListTestsQueryInput) {
-  return listTestRecords({
-    page: input.page,
-    limit: input.limit,
-    search: input.search,
-    mode: input.mode,
-    structureType: input.structureType,
-    visibilityStatus: input.visibilityStatus,
-    batchId: input.batchId,
-  });
+  return listTestRecords(input);
 }
 
 export async function getTestById(id: string) {
@@ -110,6 +108,16 @@ export async function updateTest(id: string, input: UpdateTestInput) {
     }
   }
 
+  if (
+    input.structureType === TestStructureType.SECTIONAL &&
+    existingTest._count.testQuestions > 0
+  ) {
+    throw new AppError(
+      "Section structure cannot be edited after questions are already assigned to the test.",
+      409
+    );
+  }
+
   return updateTestRecord(id, {
     title: input.title,
     slug: input.slug,
@@ -122,23 +130,17 @@ export async function updateTest(id: string, input: UpdateTestInput) {
     durationInMinutes: input.durationInMinutes,
     startAt: input.startAt ? new Date(input.startAt) : undefined,
     endAt: input.endAt ? new Date(input.endAt) : undefined,
+    sections:
+      input.structureType === "SECTIONAL"
+        ? input.sections.map((section) => ({
+            title: section.title,
+            displayOrder: section.displayOrder,
+            durationInMinutes: section.durationInMinutes,
+          }))
+        : [],
   });
 }
 
-/**
- * Duplicates an existing test into a new DRAFT test.
- *
- * What gets copied:
- * - core test settings
- * - sections
- * - assigned questions
- * - totals
- *
- * What does NOT get copied:
- * - attempts
- * - results
- * - rankings
- */
 export async function duplicateTest(id: string, actorId: string) {
   const sourceTest = await findTestBlueprintForDuplication(id);
 
@@ -175,26 +177,14 @@ function deriveStudentTestStatus(test: {
   }
 
   if (test.mode === TestMode.LIVE) {
-    if (test.startAt && now < test.startAt) {
-      return "UPCOMING";
-    }
-
-    if (test.endAt && now > test.endAt) {
-      return "COMPLETED";
-    }
-
+    if (test.startAt && now < test.startAt) return "UPCOMING";
+    if (test.endAt && now > test.endAt) return "COMPLETED";
     return "LIVE";
   }
 
   if (test.mode === TestMode.ASSIGNED) {
-    if (test.startAt && now < test.startAt) {
-      return "UPCOMING";
-    }
-
-    if (test.endAt && now > test.endAt) {
-      return "COMPLETED";
-    }
-
+    if (test.startAt && now < test.startAt) return "UPCOMING";
+    if (test.endAt && now > test.endAt) return "COMPLETED";
     return "AVAILABLE";
   }
 
@@ -212,10 +202,12 @@ export async function listStudentTests(
     mode: input.mode,
     userId,
   });
+
   const mappedItems = result.items.map((test) => ({
     ...test,
     studentStatus: deriveStudentTestStatus(test),
-    isGlobal: (test._count as { testQuestions: number; testBatches: number }).testBatches === 0,
+    isGlobal: (test._count as { testQuestions: number; testBatches: number })
+      .testBatches === 0,
   }));
 
   const filteredItems = input.studentStatus
@@ -238,18 +230,10 @@ export async function deleteTest(id: string) {
 
   if (existingTest._count.attempts > 0) {
     throw new AppError(
-      "Cannot delete this test because student attempts already exist. Close it instead.",
+      "Cannot delete this test because student attempts already exist.",
       409
     );
   }
 
-  const deleted = await deleteTestRecord(id);
-
-  return {
-    deletedTestId: deleted.id,
-    deletedTitle: deleted.title,
-    deletedSlug: deleted.slug,
-    removedSections: existingTest._count.sections,
-    removedAssignedQuestions: existingTest._count.testQuestions,
-  };
+  return deleteTestRecord(id);
 }

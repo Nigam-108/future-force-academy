@@ -6,9 +6,6 @@ import {
 } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 
-/**
- * Admin-facing include — includes testBatches for assignment display.
- */
 const testInclude = {
   createdBy: {
     select: {
@@ -49,13 +46,11 @@ const testInclude = {
   },
 } satisfies Prisma.TestInclude;
 
-/**
- * Student-facing include — excludes testBatches from response.
- * Batch filtering is done in the WHERE clause, not exposed to students.
- */
 const studentTestInclude = {
   sections: {
-    orderBy: { displayOrder: "asc" as const },
+    orderBy: {
+      displayOrder: "asc" as const,
+    },
   },
   _count: {
     select: {
@@ -74,11 +69,18 @@ const studentTestInclude = {
         },
       },
     },
-    orderBy: { assignedAt: "asc" as const },
+    orderBy: {
+      assignedAt: "asc" as const,
+    },
     take: 3,
   },
 };
 
+type SectionInput = {
+  title: string;
+  displayOrder: number;
+  durationInMinutes?: number;
+};
 
 export async function findTestBySlug(slug: string) {
   return prisma.test.findUnique({
@@ -107,10 +109,41 @@ export async function createTestRecord(data: {
   durationInMinutes?: number;
   startAt?: Date;
   endAt?: Date;
+  sections?: SectionInput[];
 }) {
-  return prisma.test.create({
-    data,
-    include: testInclude,
+  return prisma.$transaction(async (tx) => {
+    const createdTest = await tx.test.create({
+      data: {
+        createdById: data.createdById,
+        title: data.title,
+        slug: data.slug,
+        description: data.description,
+        mode: data.mode,
+        structureType: data.structureType,
+        visibilityStatus: data.visibilityStatus,
+        totalQuestions: data.totalQuestions,
+        totalMarks: data.totalMarks,
+        durationInMinutes: data.durationInMinutes,
+        startAt: data.startAt,
+        endAt: data.endAt,
+      },
+    });
+
+    if (data.structureType === "SECTIONAL" && data.sections?.length) {
+      await tx.testSection.createMany({
+        data: data.sections.map((section) => ({
+          testId: createdTest.id,
+          title: section.title,
+          displayOrder: section.displayOrder,
+          durationInMinutes: section.durationInMinutes,
+        })),
+      });
+    }
+
+    return tx.test.findUnique({
+      where: { id: createdTest.id },
+      include: testInclude,
+    });
   });
 }
 
@@ -128,12 +161,46 @@ export async function updateTestRecord(
     durationInMinutes?: number;
     startAt?: Date;
     endAt?: Date;
+    sections?: SectionInput[];
   }
 ) {
-  return prisma.test.update({
-    where: { id },
-    data,
-    include: testInclude,
+  return prisma.$transaction(async (tx) => {
+    await tx.test.update({
+      where: { id },
+      data: {
+        title: data.title,
+        slug: data.slug,
+        description: data.description,
+        mode: data.mode,
+        structureType: data.structureType,
+        visibilityStatus: data.visibilityStatus,
+        totalQuestions: data.totalQuestions,
+        totalMarks: data.totalMarks,
+        durationInMinutes: data.durationInMinutes,
+        startAt: data.startAt,
+        endAt: data.endAt,
+      },
+    });
+
+    await tx.testSection.deleteMany({
+      where: { testId: id },
+    });
+
+    if (data.structureType === "SECTIONAL" && data.sections?.length) {
+      await tx.testSection.createMany({
+        data: data.sections.map((section) => ({
+          testId: id,
+          title: section.title,
+          displayOrder: section.displayOrder,
+          durationInMinutes: section.durationInMinutes,
+        })),
+      });
+    }
+
+    return tx.test.findUnique({
+      where: { id },
+      include: testInclude,
+    });
   });
 }
 
@@ -161,11 +228,12 @@ export async function listTestRecords(filters: {
     ...(filters.visibilityStatus
       ? { visibilityStatus: filters.visibilityStatus }
       : {}),
-    // Filter by batch — show only tests linked to this batch
     ...(filters.batchId
       ? {
           testBatches: {
-            some: { batchId: filters.batchId },
+            some: {
+              batchId: filters.batchId,
+            },
           },
         }
       : {}),
@@ -193,26 +261,6 @@ export async function listTestRecords(filters: {
   };
 }
 
-/**
- * Batch-aware student test listing.
- *
- * Visibility rule:
- * - No TestBatch rows = global test, all students see it
- * - TestBatch rows exist = student must have access via EITHER:
- *   a) StudentBatch record (admin assigned)
- *   b) Active Purchase record (paid/enrolled)
- */
-/**
- * Batch-aware student test listing.
- *
- * A student sees a test if ANY of these 5 conditions are true:
- *   1. Test has no batch links (global)
- *   2. Student has full batch access via StudentBatch
- *   3. Student has full batch access via FULL_BATCH Purchase
- *   4. Student has a TestPurchase for this specific test
- *   5. Test is free (price=null/0) in a batch where student has
- *      individual TestPurchase records
- */
 export async function listStudentVisibleTestRecords(filters: {
   page: number;
   limit: number;
@@ -222,23 +270,20 @@ export async function listStudentVisibleTestRecords(filters: {
 }) {
   const batchAccessFilter: Prisma.TestWhereInput = {
     OR: [
-      // 1. Global test — no batch restrictions
       { testBatches: { none: {} } },
-
-      // 2. Full batch access via StudentBatch (admin assigned)
       {
         testBatches: {
           some: {
             batch: {
               studentBatches: {
-                some: { studentId: filters.userId },
+                some: {
+                  studentId: filters.userId,
+                },
               },
             },
           },
         },
       },
-
-      // 3. Full batch access via FULL_BATCH Purchase
       {
         testBatches: {
           some: {
@@ -254,8 +299,6 @@ export async function listStudentVisibleTestRecords(filters: {
           },
         },
       },
-
-      // 4. Individual test purchase (TestPurchase record for this test)
       {
         testPurchases: {
           some: {
@@ -264,10 +307,6 @@ export async function listStudentVisibleTestRecords(filters: {
           },
         },
       },
-
-      // 5. Free test (price=null/0 in TestBatch) in a batch where student
-      //    has any individual TestPurchase (gives access to free tests
-      //    alongside paid tests they bought)
       {
         testBatches: {
           some: {
@@ -370,8 +409,6 @@ export async function deleteTestRecord(id: string) {
     select: { id: true, title: true, slug: true },
   });
 }
-
-// ─── Blueprint type defined FIRST so duplicateTestRecord can reference it ───
 
 type TestBlueprint = {
   id: string;
