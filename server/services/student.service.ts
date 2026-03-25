@@ -71,34 +71,34 @@ export async function getStudentResultById(userId: string, attemptId: string) {
   }
 
   const answerReview = result.answers.map((answer, index) => ({
-    answerId:        answer.id,
-    questionNumber:  index + 1,
-    questionText:    answer.testQuestion.question.questionText,
-    selectedAnswer:  answer.selectedAnswer,
-    correctAnswer:   answer.testQuestion.question.correctAnswer,
-    explanation:     answer.testQuestion.question.explanation,
-    isAnswered:      answer.isAnswered,
-    isCorrect:       answer.isCorrect,
+    answerId: answer.id,
+    questionNumber: index + 1,
+    questionText: answer.testQuestion.question.questionText,
+    selectedAnswer: answer.selectedAnswer,
+    correctAnswer: answer.testQuestion.question.correctAnswer,
+    explanation: answer.testQuestion.question.explanation,
+    isAnswered: answer.isAnswered,
+    isCorrect: answer.isCorrect,
     markedForReview: answer.markedForReview,
-    sectionTitle:    answer.testQuestion.section?.title ?? null,
+    sectionTitle: answer.testQuestion.section?.title ?? null,
   }));
 
   return {
     summary: {
-      attemptId:          result.id,
-      testId:             result.testId,
-      testTitle:          result.test.title,
-      status:             result.status,
-      startedAt:          result.startedAt,
-      submittedAt:        result.submittedAt,
+      attemptId: result.id,
+      testId: result.testId,
+      testTitle: result.test.title,
+      status: result.status,
+      startedAt: result.startedAt,
+      submittedAt: result.submittedAt,
       totalMarksObtained: result.totalMarksObtained,
-      correctCount:       result.correctCount,
-      wrongCount:         result.wrongCount,
-      unansweredCount:    result.unansweredCount,
-      percentage:         result.percentage,
-      rank:               result.rank,
+      correctCount: result.correctCount,
+      wrongCount: result.wrongCount,
+      unansweredCount: result.unansweredCount,
+      percentage: result.percentage,
+      rank: result.rank,
     },
-    sections:     result.test.sections,
+    sections: result.test.sections,
     answerReview,
   };
 }
@@ -122,14 +122,11 @@ export async function getAdminStudent(studentId: string) {
   return result;
 }
 
-// ─── Block student ────────────────────────────────────────────────────────────
-// actorId + actorFullName added so we can log who blocked them
 export async function blockStudent(
   studentId: string,
   actorId: string = "",
   actorFullName: string = "Admin"
 ) {
-  // Use findStudentUserById — simpler type, definitely has fullName
   const studentUser = await findStudentUserById(studentId);
 
   try {
@@ -137,12 +134,12 @@ export async function blockStudent(
 
     if (actorId) {
       await logActivity({
-        userId:       actorId,
+        userId: actorId,
         userFullName: actorFullName,
-        action:       ACTIONS.STUDENT_BLOCKED,
-        description:  `Blocked student: "${studentUser?.fullName ?? studentId}"`,
+        action: ACTIONS.STUDENT_BLOCKED,
+        description: `Blocked student: "${studentUser?.fullName ?? studentId}"`,
         resourceType: "student",
-        resourceId:   studentId,
+        resourceId: studentId,
       });
     }
 
@@ -152,13 +149,11 @@ export async function blockStudent(
   }
 }
 
-// ─── Unblock student ──────────────────────────────────────────────────────────
 export async function unblockStudent(
   studentId: string,
   actorId: string = "",
   actorFullName: string = "Admin"
 ) {
-  // Use findStudentUserById — simpler type, definitely has fullName
   const studentUser = await findStudentUserById(studentId);
 
   try {
@@ -166,12 +161,12 @@ export async function unblockStudent(
 
     if (actorId) {
       await logActivity({
-        userId:       actorId,
+        userId: actorId,
         userFullName: actorFullName,
-        action:       ACTIONS.STUDENT_UNBLOCKED,
-        description:  `Unblocked student: "${studentUser?.fullName ?? studentId}"`,
+        action: ACTIONS.STUDENT_UNBLOCKED,
+        description: `Unblocked student: "${studentUser?.fullName ?? studentId}"`,
         resourceType: "student",
-        resourceId:   studentId,
+        resourceId: studentId,
       });
     }
 

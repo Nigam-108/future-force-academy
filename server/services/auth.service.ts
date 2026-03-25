@@ -1,41 +1,130 @@
+import { UserRole, UserStatus } from "@prisma/client";
 import { comparePassword, hashPassword } from "@/server/auth/password";
-import { AppError } from "@/server/utils/errors";
+import { signSessionToken } from "@/server/auth/jwt";
 import {
   createUser,
   findUserByEmail,
   findUserById,
   findUserByMobileNumber,
 } from "@/server/repositories/user.repository";
-import { signSessionToken } from "@/server/auth/jwt";
+import {
+  findPendingSignupByNormalizedEmail,
+  findPendingSignupByNormalizedMobileNumber,
+} from "@/server/repositories/signup-v2.repository";
 import {
   isValidEmailFormat,
   isValidIndianMobileNumber,
   normalizeEmail,
   normalizeMobileNumber,
 } from "@/server/utils/auth-normalizers";
-import {
-  findPendingSignupByNormalizedEmail,
-  findPendingSignupByNormalizedMobileNumber,
-} from "@/server/repositories/signup-v2.repository";
+import { buildDisplayName, resolveDisplayName } from "@/server/utils/name";
+import { AppError } from "@/server/utils/errors";
+
+async function resolveLoginIdentifier(identifier: string) {
+  const trimmed = identifier.trim();
+
+  if (!trimmed) {
+    throw new AppError("Email or mobile number is required", 400);
+  }
+
+  if (isValidEmailFormat(trimmed)) {
+    const email = normalizeEmail(trimmed);
+
+    const [user, pendingSignup] = await Promise.all([
+      findUserByEmail(email),
+      findPendingSignupByNormalizedEmail(email),
+    ]);
+
+    return {
+      identifierType: "email" as const,
+      normalizedIdentifier: email,
+      user,
+      pendingSignup,
+    };
+  }
+
+  if (isValidIndianMobileNumber(trimmed)) {
+    const mobileNumber = normalizeMobileNumber(trimmed);
+
+    const [user, pendingSignup] = await Promise.all([
+      findUserByMobileNumber(mobileNumber),
+      findPendingSignupByNormalizedMobileNumber(mobileNumber),
+    ]);
+
+    return {
+      identifierType: "mobileNumber" as const,
+      normalizedIdentifier: mobileNumber,
+      user,
+      pendingSignup,
+    };
+  }
+
+  throw new AppError("Enter a valid email address or 10-digit mobile number", 400);
+}
+
+function buildUserResponse(user: {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  fullName?: string | null;
+  email: string;
+  role: UserRole;
+  preferredLanguage: string;
+  emailVerified: boolean;
+}) {
+  return {
+    id: user.id,
+    firstName: user.firstName ?? null,
+    lastName: user.lastName ?? null,
+    fullName: user.fullName ?? resolveDisplayName(user),
+    displayName: resolveDisplayName(user),
+    email: user.email,
+    role: user.role,
+    preferredLanguage: user.preferredLanguage,
+    emailVerified: user.emailVerified,
+  };
+}
 
 export async function signupUser(input: {
-  fullName: string;
+  firstName: string;
+  lastName?: string | null;
   email: string;
   mobileNumber?: string;
   password: string;
 }) {
-  const existingUser = await findUserByEmail(input.email);
+  const firstName = input.firstName.trim();
+  const lastName = input.lastName?.trim() ? input.lastName.trim() : null;
+  const email = normalizeEmail(input.email);
+  const mobileNumber = input.mobileNumber?.trim()
+    ? normalizeMobileNumber(input.mobileNumber)
+    : undefined;
 
-  if (existingUser) {
-    throw new AppError("User already exists with this email", 409);
+  if (!firstName) {
+    throw new AppError("First name is required", 422);
+  }
+
+  const [existingEmailUser, existingMobileUser] = await Promise.all([
+    findUserByEmail(email),
+    mobileNumber ? findUserByMobileNumber(mobileNumber) : Promise.resolve(null),
+  ]);
+
+  if (existingEmailUser) {
+    throw new AppError("An account with this email already exists", 409);
+  }
+
+  if (existingMobileUser) {
+    throw new AppError("An account with this mobile number already exists", 409);
   }
 
   const passwordHash = await hashPassword(input.password);
+  const fullName = buildDisplayName(firstName, lastName);
 
   const user = await createUser({
-    fullName: input.fullName,
-    email: input.email,
-    mobileNumber: input.mobileNumber,
+    firstName,
+    lastName,
+    fullName,
+    email,
+    mobileNumber,
     passwordHash,
   });
 
@@ -45,64 +134,37 @@ export async function signupUser(input: {
     role: user.role,
   });
 
-  return { user, token };
+  return {
+    user: buildUserResponse(user),
+    token,
+  };
 }
 
-function resolveLoginIdentifier(identifier: string) {
-  const raw = identifier.trim();
-
-  const normalizedMobileNumber = normalizeMobileNumber(raw);
-  if (isValidIndianMobileNumber(normalizedMobileNumber)) {
-    return {
-      type: "mobile" as const,
-      value: normalizedMobileNumber,
-    };
-  }
-
-  const normalizedEmail = normalizeEmail(raw);
-  if (isValidEmailFormat(normalizedEmail)) {
-    return {
-      type: "email" as const,
-      value: normalizedEmail,
-    };
-  }
-
-  throw new AppError("Enter a valid email or 10-digit mobile number", 422);
-}
-
-export async function loginUser(input: { identifier: string; password: string }) {
-  const resolved = resolveLoginIdentifier(input.identifier);
-  const now = Date.now();
-
-  const pendingSignup =
-    resolved.type === "email"
-      ? await findPendingSignupByNormalizedEmail(resolved.value)
-      : await findPendingSignupByNormalizedMobileNumber(resolved.value);
-
-  if (pendingSignup && pendingSignup.expiresAt.getTime() > now) {
-    throw new AppError(
-      "Account not created yet. Complete email verification first.",
-      409
-    );
-  }
-
-  const user =
-    resolved.type === "email"
-      ? await findUserByEmail(resolved.value)
-      : await findUserByMobileNumber(resolved.value);
+export async function loginUser(input: {
+  identifier: string;
+  password: string;
+}) {
+  const { user, pendingSignup } = await resolveLoginIdentifier(input.identifier);
 
   if (!user) {
-    throw new AppError("Invalid email/mobile or password", 401);
+    if (pendingSignup) {
+      throw new AppError(
+        "Account not created yet. Complete email verification first.",
+        403
+      );
+    }
+
+    throw new AppError("Invalid credentials", 401);
+  }
+
+  if (user.status === UserStatus.BLOCKED) {
+    throw new AppError("Your account is blocked. Please contact admin.", 403);
   }
 
   const isPasswordValid = await comparePassword(input.password, user.passwordHash);
 
   if (!isPasswordValid) {
-    throw new AppError("Invalid email/mobile or password", 401);
-  }
-
-  if (user.status === "BLOCKED") {
-    throw new AppError("User account is blocked", 403);
+    throw new AppError("Invalid credentials", 401);
   }
 
   const token = await signSessionToken({
@@ -112,15 +174,8 @@ export async function loginUser(input: { identifier: string; password: string })
   });
 
   return {
+    user: buildUserResponse(user),
     token,
-    user: {
-      id: user.id,
-      fullName: user.fullName,
-      email: user.email,
-      role: user.role,
-      preferredLanguage: user.preferredLanguage,
-      emailVerified: user.emailVerified,
-    },
   };
 }
 
@@ -131,13 +186,5 @@ export async function getCurrentUser(userId: string) {
     throw new AppError("User not found", 404);
   }
 
-  return {
-    id: user.id,
-    fullName: user.fullName,
-    email: user.email,
-    role: user.role,
-    preferredLanguage: user.preferredLanguage,
-    emailVerified: user.emailVerified,
-    status: user.status,
-  };
+  return buildUserResponse(user);
 }

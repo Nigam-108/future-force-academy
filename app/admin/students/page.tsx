@@ -2,10 +2,14 @@ import Link from "next/link";
 import { PageShell } from "@/components/shared/page-shell";
 import { fetchInternalApi } from "@/lib/server-api";
 
+
 type AdminStudentsResponse = {
   items: Array<{
     id: string;
     fullName: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    displayName?: string;
     email: string;
     mobileNumber: string | null;
     preferredLanguage: string;
@@ -18,6 +22,22 @@ type AdminStudentsResponse = {
   limit: number;
   totalPages: number;
 };
+
+function getStudentDisplayName(student: {
+  fullName: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  displayName?: string;
+}) {
+  if (student.displayName) return student.displayName;
+
+  const fromParts = [student.firstName, student.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  return fromParts || getStudentDisplayName(student);
+}
 
 export default async function AdminStudentsPage() {
   const result = await fetchInternalApi<AdminStudentsResponse>("/api/admin/students");
@@ -60,7 +80,7 @@ export default async function AdminStudentsPage() {
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <h2 className="text-xl font-semibold text-slate-900">
-                      {student.fullName}
+                      {getStudentDisplayName(student)}
                     </h2>
                     <p className="mt-1 text-sm text-slate-500">{student.email}</p>
                     <p className="mt-2 text-sm text-slate-600">

@@ -9,6 +9,8 @@ export async function findStudentUserById(userId: string) {
     },
     select: {
       id: true,
+      firstName: true,
+      lastName: true,
       fullName: true,
       email: true,
       mobileNumber: true,
@@ -24,9 +26,11 @@ export async function findStudentUserById(userId: string) {
 export async function updateStudentUserById(
   userId: string,
   data: {
+    firstName?: string;
+    lastName?: string | null;
     fullName?: string;
     mobileNumber?: string | null;
-    preferredLanguage?: "EN" | "GU" | "HI";
+    preferredLanguage?: "EN" | "HI" | "GU";
   }
 ) {
   return prisma.user.update({
@@ -34,6 +38,8 @@ export async function updateStudentUserById(
     data,
     select: {
       id: true,
+      firstName: true,
+      lastName: true,
       fullName: true,
       email: true,
       mobileNumber: true,
@@ -166,15 +172,23 @@ export async function listAdminStudents(filters: {
       take: filters.limit,
       orderBy: { createdAt: "desc" },
       select: {
-        id: true,
-        fullName: true,
-        email: true,
-        mobileNumber: true,
-        preferredLanguage: true,
-        emailVerified: true,
-        status: true,
-        createdAt: true,
-      },
+  id: true,
+  firstName: true,
+  lastName: true,
+  fullName: true,
+  email: true,
+  mobileNumber: true,
+  preferredLanguage: true,
+  status: true,
+  createdAt: true,
+  _count: {
+    select: {
+      purchases: true,
+      payments: true,
+      attempts: true,
+    },
+  },
+},
     }),
     prisma.user.count({ where }),
   ]);
@@ -195,16 +209,17 @@ export async function getAdminStudentById(studentId: string) {
       role: UserRole.STUDENT,
     },
     select: {
-      id: true,
-      fullName: true,
-      email: true,
-      mobileNumber: true,
-      preferredLanguage: true,
-      emailVerified: true,
-      status: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+  id: true,
+  firstName: true,
+  lastName: true,
+  fullName: true,
+  email: true,
+  mobileNumber: true,
+  preferredLanguage: true,
+  emailVerified: true,
+  status: true,
+  createdAt: true,
+},
   });
 
   if (!student) {
@@ -254,12 +269,14 @@ export async function updateStudentStatus(studentId: string, status: UserStatus)
     where: { id: studentId },
     data: { status },
     select: {
-      id: true,
-      fullName: true,
-      email: true,
-      status: true,
-      updatedAt: true,
-    },
+  id: true,
+  firstName: true,
+  lastName: true,
+  fullName: true,
+  email: true,
+  mobileNumber: true,
+  status: true,
+},
   });
 }
 

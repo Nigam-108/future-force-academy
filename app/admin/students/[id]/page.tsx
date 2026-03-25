@@ -2,18 +2,36 @@ import Link from "next/link";
 import { PageShell } from "@/components/shared/page-shell";
 import { fetchInternalApi } from "@/lib/server-api";
 
+function getStudentDisplayName(student: {
+  displayName?: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  fullName?: string | null;
+}) {
+  if (student.displayName) return student.displayName;
+
+  const fromParts = [student.firstName, student.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  return fromParts || student.fullName || "Student";
+}
+
 type AdminStudentDetailResponse = {
   student: {
-    id: string;
-    fullName: string;
-    email: string;
-    mobileNumber: string | null;
-    preferredLanguage: string;
-    emailVerified: boolean;
-    status: string;
-    createdAt: string;
-    updatedAt: string;
-  };
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  fullName: string;
+  displayName: string;
+  email: string;
+  mobileNumber: string | null;
+  preferredLanguage: "EN" | "HI" | "GU";
+  emailVerified: boolean;
+  status: "ACTIVE" | "BLOCKED";
+  createdAt: string;
+};
   stats: {
     submittedAttemptsCount: number;
     inProgressAttemptsCount: number;
@@ -203,11 +221,29 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
             </h2>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
-                <p className="text-sm text-slate-500">Full Name</p>
-                <p className="mt-1 font-medium text-slate-900">
-                  {student.fullName}
-                </p>
-              </div>
+  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+    Display Name
+  </p>
+  <p className="mt-1 text-sm font-medium text-slate-900">
+    {getStudentDisplayName(student)}
+  </p>
+</div>
+
+<div className="grid gap-4 sm:grid-cols-2">
+  <div>
+    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+      First Name
+    </p>
+    <p className="mt-1 text-sm text-slate-900">{student.firstName || "—"}</p>
+  </div>
+
+  <div>
+    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+      Last Name
+    </p>
+    <p className="mt-1 text-sm text-slate-900">{student.lastName || "—"}</p>
+  </div>
+</div>
               <div>
                 <p className="text-sm text-slate-500">Email</p>
                 <p className="mt-1 font-medium text-slate-900">

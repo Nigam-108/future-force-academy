@@ -20,6 +20,8 @@ export async function findUserById(id: string) {
 
 export async function createUser(data: {
   fullName: string;
+  firstName?: string | null;
+  lastName?: string | null;
   email: string;
   mobileNumber?: string;
   passwordHash: string;
@@ -29,6 +31,8 @@ export async function createUser(data: {
     select: {
       id: true,
       fullName: true,
+      firstName: true,
+      lastName: true,
       email: true,
       role: true,
       status: true,
@@ -39,7 +43,10 @@ export async function createUser(data: {
   });
 }
 
-export async function updateUserPassword(userId: string, passwordHash: string) {
+export async function updateUserPassword(
+  userId: string,
+  passwordHash: string
+) {
   return prisma.user.update({
     where: { id: userId },
     data: { passwordHash },

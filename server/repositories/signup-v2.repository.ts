@@ -13,17 +13,30 @@ export type PendingSignupWithRelations = Prisma.PendingSignupGetPayload<{
   include: typeof pendingSignupInclude;
 }>;
 
-export async function findRegisteredUserByEmail(email: string) {
-  return prisma.user.findUnique({
-    where: { email },
-    select: { id: true, email: true, fullName: true },
-  });
-}
-
 export async function findRegisteredUserByMobileNumber(mobileNumber: string) {
   return prisma.user.findFirst({
     where: { mobileNumber },
-    select: { id: true, mobileNumber: true, fullName: true },
+    select: {
+      id: true,
+      mobileNumber: true,
+      fullName: true,
+      firstName: true,
+      lastName: true,
+    },
+  });
+}
+
+
+export async function findRegisteredUserByEmail(email: string) {
+  return prisma.user.findUnique({
+    where: { email },
+    select: {
+      id: true,
+      email: true,
+      fullName: true,
+      firstName: true,
+      lastName: true,
+    },
   });
 }
 
@@ -92,30 +105,35 @@ export async function createVerifiedUserFromPendingSignup(params: {
 }) {
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
-      data: {
-        fullName: buildDisplayName(params.pendingSignup.firstName, params.pendingSignup.lastName),
-        email: params.pendingSignup.normalizedEmail,
-        mobileNumber: params.pendingSignup.normalizedMobileNumber,
-        passwordHash: params.pendingSignup.passwordHash,
-        role: "STUDENT",
-        status: "ACTIVE",
-        emailVerified: true,
-        emailVerifiedAt: new Date(),
-        marketingEmailsEnabled: params.pendingSignup.marketingEmailsEnabled,
-      },
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-        mobileNumber: true,
-        role: true,
-        status: true,
-        emailVerified: true,
-        emailVerifiedAt: true,
-        marketingEmailsEnabled: true,
-        createdAt: true,
-      },
-    });
+  data: {
+    fullName: buildDisplayName(
+      params.pendingSignup.firstName,
+      params.pendingSignup.lastName
+    ),
+    firstName: params.pendingSignup.firstName,
+    lastName: params.pendingSignup.lastName,
+    email: params.pendingSignup.normalizedEmail,
+    mobileNumber: params.pendingSignup.normalizedMobileNumber,
+    passwordHash: params.pendingSignup.passwordHash,
+    role: "STUDENT",
+    status: "ACTIVE",
+    emailVerified: true,
+    emailVerifiedAt: new Date(),
+  },
+  select: {
+    id: true,
+    fullName: true,
+    firstName: true,
+    lastName: true,
+    email: true,
+    mobileNumber: true,
+    role: true,
+    status: true,
+    emailVerified: true,
+    createdAt: true,
+    updatedAt: true,
+  },
+});
 
     await tx.userPolicyConsent.createMany({
       data: [
