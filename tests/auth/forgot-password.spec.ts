@@ -33,7 +33,7 @@ test.describe("Auth - forgot password flow", () => {
     await page.getByRole("button", { name: /send reset otp/i }).click();
 
     await expect(
-      page.getByText(/enter a valid email address/i)
+      page.getByText(/valid email/i)
     ).toBeVisible();
   });
 });

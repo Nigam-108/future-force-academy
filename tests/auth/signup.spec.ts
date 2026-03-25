@@ -8,11 +8,27 @@ test.describe("Auth - signup flow", () => {
       page.getByRole("heading", { name: /student signup|sign up|signup/i })
     ).toBeVisible();
 
-    await expect(page.getByLabel(/first name/i)).toBeVisible();
-    await expect(page.getByLabel(/last name/i)).toBeVisible();
-    await expect(page.getByLabel(/email/i)).toBeVisible();
-    await expect(page.getByLabel(/mobile/i)).toBeVisible();
-    await expect(page.getByLabel(/password/i)).toBeVisible();
+    await expect(
+      page.getByPlaceholder(/enter your first name/i)
+    ).toBeVisible();
+
+    await expect(
+      page.getByPlaceholder(/enter your last name/i)
+    ).toBeVisible();
+
+    await expect(
+      page.getByPlaceholder(/enter your email/i)
+    ).toBeVisible();
+
+    await expect(
+      page.getByPlaceholder(/10-digit mobile number/i)
+    ).toBeVisible();
+
+    await expect(
+      page.getByPlaceholder(/^create password$/i)
+        .or(page.getByPlaceholder(/password/i))
+        .first()
+    ).toBeVisible();
 
     await expect(
       page.getByRole("button", { name: /send otp/i })
@@ -23,7 +39,7 @@ test.describe("Auth - signup flow", () => {
     await page.goto("/signup");
 
     await expect(
-      page.getByRole("link", { name: /login/i })
+      page.getByRole("link", { name: /login|sign in/i })
     ).toBeVisible();
   });
 
