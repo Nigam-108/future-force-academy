@@ -111,6 +111,7 @@ lastName  String?
   policyConsents           UserPolicyConsent[]
   passwordResetTokens      PasswordResetToken[]
   signupVerificationAudits SignupVerificationAudit[] @relation("VerifiedUserAudits")
+  authEvents AuthEvent[]
 }
 
 model Question {
@@ -342,6 +343,19 @@ enum PurchaseStatus {
 enum PurchaseType {
   FULL_BATCH
   INDIVIDUAL_TESTS
+}
+
+enum AuthEventType {
+  SIGNUP_STARTED
+  OTP_SENT
+  OTP_RESENT
+  OTP_VERIFIED
+  SIGNUP_COMPLETED
+  SIGNUP_FAILED
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  FORGOT_PASSWORD_REQUESTED
+  POLICY_ACKNOWLEDGED
 }
 
 enum DiscountType {
@@ -696,6 +710,27 @@ model UserPolicyConsent {
 
   @@unique([userId, policyVersionId])
   @@index([policyType, acceptedAt])
+}
+
+model AuthEvent {
+  id           String        @id @default(cuid())
+  eventType    AuthEventType
+  email        String?
+  mobileNumber String?
+  userId       String?
+  sessionId    String?
+  ipAddress    String?
+  userAgent    String?
+  metadata     Json?
+  createdAt    DateTime      @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([eventType, createdAt])
+  @@index([email])
+  @@index([mobileNumber])
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model AuthAttempt {
