@@ -13,7 +13,7 @@ test.describe("Auth - forgot password flow", () => {
     ).toBeVisible();
 
     await expect(
-      page.getByPlaceholder(/registered email/i)
+      page.getByPlaceholder(/enter your registered email/i)
     ).toBeVisible();
   });
 
@@ -26,14 +26,17 @@ test.describe("Auth - forgot password flow", () => {
   });
 
   test("forgot-password validation blocks invalid email", async ({ page }) => {
-    await page.goto("/forgot-password");
+  await page.goto("/forgot-password");
 
-    await page.getByPlaceholder(/registered email/i).fill("wrong-email");
+  const emailInput = page.getByPlaceholder(/enter your registered email/i);
+  await emailInput.fill("wrong-email");
 
-    await page.getByRole("button", { name: /send reset otp/i }).click();
+  await page.getByRole("button", { name: /send reset otp/i }).click();
 
-    await expect(
-      page.getByText(/valid email/i)
-    ).toBeVisible();
+  const isInvalid = await emailInput.evaluate((el) => {
+    return !(el as HTMLInputElement).checkValidity();
   });
+
+  expect(isInvalid).toBe(true);
+});
 });

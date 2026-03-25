@@ -5,7 +5,7 @@ test.describe("Auth - signup flow", () => {
     await page.goto("/signup");
 
     await expect(
-      page.getByRole("heading", { name: /student signup|sign up|signup/i })
+      page.getByRole("heading", { name: /student signup|student signup/i })
     ).toBeVisible();
 
     await expect(
@@ -13,21 +13,23 @@ test.describe("Auth - signup flow", () => {
     ).toBeVisible();
 
     await expect(
-      page.getByPlaceholder(/enter your last name/i)
+      page.getByPlaceholder(/enter your last name \(optional\)/i)
     ).toBeVisible();
 
     await expect(
-      page.getByPlaceholder(/enter your email/i)
+      page.getByPlaceholder(/enter your email/i).first()
     ).toBeVisible();
 
     await expect(
-      page.getByPlaceholder(/10-digit mobile number/i)
+      page.getByPlaceholder(/enter your 10-digit mobile number/i)
     ).toBeVisible();
 
     await expect(
-      page.getByPlaceholder(/^create password$/i)
-        .or(page.getByPlaceholder(/password/i))
-        .first()
+      page.getByPlaceholder(/enter your password/i)
+    ).toBeVisible();
+
+    await expect(
+      page.getByPlaceholder(/confirm your password/i)
     ).toBeVisible();
 
     await expect(
