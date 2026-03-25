@@ -1,6 +1,8 @@
 import { logActivity, ACTIONS } from "@/server/services/activity.service";
 import { UserStatus } from "@prisma/client";
 import { AppError } from "@/server/utils/errors";
+import { buildDisplayName } from "@/server/utils/name";
+
 import {
   findStudentSubmittedResultById,
   findStudentUserById,
@@ -50,8 +52,22 @@ export async function updateStudentProfile(
     throw new AppError("Student not found", 404);
   }
 
+  const nextFirstName =
+    typeof input.firstName === "string" && input.firstName.trim()
+      ? input.firstName.trim()
+      : student.firstName ?? student.fullName.split(" ")[0] ?? "";
+
+  const nextLastName =
+    Object.prototype.hasOwnProperty.call(input, "lastName")
+      ? input.lastName?.trim()
+        ? input.lastName.trim()
+        : null
+      : student.lastName ?? null;
+
   return updateStudentUserById(userId, {
-    fullName: input.fullName,
+    firstName: nextFirstName,
+    lastName: nextLastName,
+    fullName: buildDisplayName(nextFirstName, nextLastName),
     mobileNumber: Object.prototype.hasOwnProperty.call(input, "mobileNumber")
       ? input.mobileNumber ?? null
       : undefined,

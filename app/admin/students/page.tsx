@@ -28,7 +28,7 @@ function getStudentDisplayName(student: {
   firstName?: string | null;
   lastName?: string | null;
   displayName?: string;
-}) {
+}): string {
   if (student.displayName) return student.displayName;
 
   const fromParts = [student.firstName, student.lastName]
@@ -36,7 +36,7 @@ function getStudentDisplayName(student: {
     .join(" ")
     .trim();
 
-  return fromParts || getStudentDisplayName(student);
+  return fromParts || student.fullName || "Student";
 }
 
 export default async function AdminStudentsPage() {

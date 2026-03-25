@@ -118,15 +118,17 @@ export async function studentHasTestAccess(
   if (batchAccessChecks.some(Boolean)) return true;
 
   // Condition 3: Individual test purchase
-  const testPurchase = await prisma.testPurchase.findFirst({
-    where: {
-      userId,
-      testId,
-      batchId: { in: activeBatchIds },
-      status: "ACTIVE",
-    },
-    select: { id: true },
-  });
+const testPurchase = await prisma.testPurchase.findFirst({
+  where: {
+    userId,
+    testId,
+    batchId: { in: activeBatchIds },
+    status: "ACTIVE",
+  },
+  select: { id: true },
+});
+
+if (testPurchase) return true;
   // Now checks validUntil before granting access
 if (testPurchase && isPurchaseValid(testPurchase)) return true;
 
