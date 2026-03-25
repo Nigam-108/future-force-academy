@@ -9,10 +9,17 @@ import {
   getPaymentSummaryStats,
   listPaymentRecords,
   listStudentPurchases,
-  listPaymentsByStudent, 
+  listPaymentsByStudent,
   listPurchasesByStudent,
   updatePaymentStatusRecord,
+  findExpiredActivePurchases,
+  bulkExpirePurchases,
+  findExpiredActiveTestPurchases,
+  bulkExpireTestPurchases,
+  isPurchaseValid,
+  isTestPurchaseValid,
 } from "@/server/repositories/payment.repository";
+
 import { prisma } from "@/server/db/prisma";
 import type {
   ListPaymentsQueryInput,
@@ -21,10 +28,6 @@ import type {
 } from "@/server/validations/payment.schema";
 
 import { logActivity } from "@/server/services/activity.service";
-import {
-  findExpiredActivePurchases,
-  bulkExpirePurchases,
-} from "@/server/repositories/payment.repository";
 
 
 
@@ -231,11 +234,10 @@ export async function getStudentPurchases(userId: string) {
 
   return purchases.map((purchase) => ({
     ...purchase,
-    isActive: purchase.status === PurchaseStatus.ACTIVE,
+    isActive: isPurchaseValid(purchase),
     isExpired:
       purchase.status === PurchaseStatus.EXPIRED ||
-      (purchase.validUntil !== null &&
-        new Date() > new Date(purchase.validUntil)),
+      (!!purchase.validUntil && new Date() > new Date(purchase.validUntil)),
   }));
 }
 
@@ -364,41 +366,63 @@ export async function getStudentPurchaseHistory(userId: string) {
 export async function expireOverduePurchases(): Promise<{
   checked: number;
   expired: number;
-  details: Array<{ id: string; userId: string; batchId: string | null }>;
+  purchaseDetails: Array<{ id: string; userId: string; batchId: string | null }>;
+  testPurchaseDetails: Array<{
+    id: string;
+    userId: string;
+    batchId: string | null;
+    testId: string;
+  }>;
 }> {
-  // Step 1 — find all purchases that need expiring
-  const expiredPurchases = await findExpiredActivePurchases();
+  const [expiredPurchases, expiredTestPurchases] = await Promise.all([
+    findExpiredActivePurchases(),
+    findExpiredActiveTestPurchases(),
+  ]);
 
-  // Nothing to expire — return early
-  if (expiredPurchases.length === 0) {
-    return { checked: 0, expired: 0, details: [] };
+  const purchaseIds = expiredPurchases.map((p) => p.id);
+  const testPurchaseIds = expiredTestPurchases.map((tp) => tp.id);
+
+  const [purchaseResult, testPurchaseResult] = await Promise.all([
+    purchaseIds.length > 0
+      ? bulkExpirePurchases(purchaseIds)
+      : Promise.resolve({ count: 0 }),
+    testPurchaseIds.length > 0
+      ? bulkExpireTestPurchases(testPurchaseIds)
+      : Promise.resolve({ count: 0 }),
+  ]);
+
+  const totalExpired = purchaseResult.count + testPurchaseResult.count;
+  const totalChecked = expiredPurchases.length + expiredTestPurchases.length;
+
+  if (totalExpired > 0) {
+    await logActivity({
+      userId: "system",
+      userFullName: "System (Cron)",
+      action: "purchase.expired",
+      description: `Auto-expired ${totalExpired} overdue access record(s)`,
+      resourceType: "purchase",
+      metadata: {
+        expiredPurchaseCount: purchaseResult.count,
+        expiredTestPurchaseCount: testPurchaseResult.count,
+        purchaseIds,
+        testPurchaseIds,
+      },
+    });
   }
 
-  const ids = expiredPurchases.map((p) => p.id);
-
-  // Step 2 — bulk expire in one DB query
-  const result = await bulkExpirePurchases(ids);
-
-  // Step 3 — log to activity trail for admin visibility
-  await logActivity({
-    userId:       "system",
-    userFullName: "System (Cron)",
-    action:       "purchase.expired",
-    description:  `Auto-expired ${result.count} purchase(s) past their validUntil date`,
-    resourceType: "purchase",
-    metadata: {
-      expiredCount: result.count,
-      purchaseIds:  ids,
-    },
-  });
-
   return {
-    checked: expiredPurchases.length,
-    expired: result.count,
-    details: expiredPurchases.map((p) => ({
-      id:      p.id,
-      userId:  p.userId,
+    checked: totalChecked,
+    expired: totalExpired,
+    purchaseDetails: expiredPurchases.map((p) => ({
+      id: p.id,
+      userId: p.userId,
       batchId: p.batchId,
+    })),
+    testPurchaseDetails: expiredTestPurchases.map((tp) => ({
+      id: tp.id,
+      userId: tp.userId,
+      batchId: tp.batchId,
+      testId: tp.testId,
     })),
   };
 }

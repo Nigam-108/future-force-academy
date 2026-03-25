@@ -351,14 +351,78 @@ export async function bulkExpirePurchases(purchaseIds: string[]) {
 // Pure function — no DB call needed, just checks the fields
 export function isPurchaseValid(purchase: {
   status: string;
+  validFrom?: Date | null;
   validUntil: Date | null;
 }): boolean {
-  // Must be ACTIVE status first
-  if (purchase.status !== "ACTIVE") return false;
+  return isValidityWindowActive(purchase);
+}
 
-  // No validUntil = lifetime purchase — always valid
-  if (!purchase.validUntil) return true;
+export function isValidityWindowActive(input: {
+  status: string;
+  validFrom?: Date | null;
+  validUntil?: Date | null;
+}): boolean {
+  if (input.status !== "ACTIVE") return false;
 
-  // Check if we're still within the validity window
-  return new Date() <= purchase.validUntil;
+  const now = new Date();
+
+  if (input.validFrom && now < input.validFrom) {
+    return false;
+  }
+
+  if (input.validUntil && now > input.validUntil) {
+    return false;
+  }
+
+  return true;
+}
+
+export function isTestPurchaseValid(testPurchase: {
+  status: string;
+  validFrom?: Date | null;
+  validUntil?: Date | null;
+}): boolean {
+  return isValidityWindowActive(testPurchase);
+}
+
+export async function findExpiredActiveTestPurchases() {
+  return prisma.testPurchase.findMany({
+    where: {
+      status: "ACTIVE",
+      validUntil: {
+        lt: new Date(),
+        not: null,
+      },
+    },
+    select: {
+      id: true,
+      userId: true,
+      batchId: true,
+      testId: true,
+      validUntil: true,
+      user: {
+        select: {
+          fullName: true,
+          email: true,
+        },
+      },
+      test: {
+        select: {
+          title: true,
+        },
+      },
+    },
+  });
+}
+
+export async function bulkExpireTestPurchases(testPurchaseIds: string[]) {
+  return prisma.testPurchase.updateMany({
+    where: {
+      id: { in: testPurchaseIds },
+      status: "ACTIVE",
+    },
+    data: {
+      status: "EXPIRED",
+    },
+  });
 }

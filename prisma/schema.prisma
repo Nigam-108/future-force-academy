@@ -464,14 +464,16 @@ model CouponUsage {
 /// Created when a student buys specific tests from a batch (not full batch).
 /// One record per test purchased — unique per (userId, testId).
 model TestPurchase {
-  id        String         @id @default(cuid())
-  userId    String
-  testId    String
-  batchId   String
-  paymentId String?
-  status    PurchaseStatus @default(ACTIVE)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  id         String         @id @default(cuid())
+  userId     String
+  testId     String
+  batchId    String
+  paymentId  String?
+  status     PurchaseStatus @default(ACTIVE)
+  validFrom  DateTime       @default(now())
+  validUntil DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
 
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   test    Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
@@ -479,6 +481,8 @@ model TestPurchase {
   payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 
   @@unique([userId, testId])
+  @@index([status, validUntil])
+  @@index([userId, batchId, status])
 }
 
 /// ─── Permission System ─────────────────────────────────────────────────────

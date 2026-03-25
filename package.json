@@ -15,7 +15,8 @@
         "test:e2e": "playwright test",
         "test:e2e:ui": "playwright test --ui",
         "test:e2e:headed": "playwright test --headed",
-        "test:e2e:auth": "playwright test tests/auth"
+        "test:e2e:auth": "playwright test tests/auth",
+        "expire:access": "tsx scripts/expire-overdue-access.ts"
     },
     "dependencies": {
         "@prisma/client": "^6.6.0",
