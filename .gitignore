@@ -29,3 +29,7 @@ Thumbs.db
 *.pem
 *.key
 *.crt
+
+playwright-report/
+test-results/
+playwright/.cache/
