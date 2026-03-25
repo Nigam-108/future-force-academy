@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 
 const protectedStudentRoutes = ["/student"];
-const protectedAdminRoutes = ["/admin/dashboard", "/admin/questions", "/admin/tests", "/admin/students", "/admin/payments", "/admin/reports", "/admin/categories", "/admin/announcements", "/admin/support", "/admin/permissions", "/admin/activity-logs"];
+const protectedAdminRoutes = ["/admin"];
+const guestOnlyRoutes = ["/login", "/signup", "/forgot-password", "/signup/success"];
 
 const cookieName = process.env.COOKIE_NAME || "ffa_session";
 const jwtSecret = process.env.JWT_SECRET || "replace-with-secret";
@@ -17,6 +18,7 @@ async function readSession(request: NextRequest) {
 
   try {
     const { payload } = await jwtVerify(token, secret);
+
     return payload as {
       userId: string;
       email: string;
@@ -27,35 +29,63 @@ async function readSession(request: NextRequest) {
   }
 }
 
-export async function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+function getDefaultRedirectPath(role: "STUDENT" | "ADMIN" | "SUB_ADMIN") {
+  if (role === "ADMIN" || role === "SUB_ADMIN") {
+    return "/admin/dashboard";
+  }
 
-  const isStudentProtected = protectedStudentRoutes.some((route) => pathname.startsWith(route));
-  const isAdminProtected = protectedAdminRoutes.some((route) => pathname.startsWith(route));
+  return "/student/dashboard";
+}
+
+export async function middleware(request: NextRequest) {
+  const { pathname, search } = request.nextUrl;
+
+  const isStudentProtected = protectedStudentRoutes.some((route) =>
+    pathname.startsWith(route)
+  );
+  const isAdminProtected = protectedAdminRoutes.some((route) =>
+    pathname.startsWith(route)
+  );
+  const isGuestOnly = guestOnlyRoutes.includes(pathname);
+
+  const session = await readSession(request);
+
+  if (isGuestOnly && session) {
+    return NextResponse.redirect(
+      new URL(getDefaultRedirectPath(session.role), request.url)
+    );
+  }
 
   if (!isStudentProtected && !isAdminProtected) {
     return NextResponse.next();
   }
 
-  if (pathname === "/admin/login") {
-    return NextResponse.next();
-  }
-
-  const session = await readSession(request);
-
   if (!session) {
     const loginUrl = new URL("/login", request.url);
+    const redirectTo = `${pathname}${search || ""}`;
+    loginUrl.searchParams.set("redirectTo", redirectTo);
+
     return NextResponse.redirect(loginUrl);
   }
 
   if (isAdminProtected && session.role !== "ADMIN" && session.role !== "SUB_ADMIN") {
-    const deniedUrl = new URL("/access-denied", request.url);
-    return NextResponse.redirect(deniedUrl);
+    return NextResponse.redirect(new URL("/access-denied", request.url));
+  }
+
+  if (isStudentProtected && session.role !== "STUDENT") {
+    return NextResponse.redirect(new URL(getDefaultRedirectPath(session.role), request.url));
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/student/:path*", "/admin/:path*"],
+  matcher: [
+    "/student/:path*",
+    "/admin/:path*",
+    "/login",
+    "/signup",
+    "/forgot-password",
+    "/signup/success",
+  ],
 };

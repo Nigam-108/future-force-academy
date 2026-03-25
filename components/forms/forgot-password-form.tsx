@@ -24,6 +24,11 @@ type ForgotPasswordResetData = {
   loginRedirectDelaySeconds?: number;
 };
 
+type ForgotPasswordFormProps = {
+  initialEmail?: string;
+  initialNotice?: string;
+};
+
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
 }
@@ -55,11 +60,14 @@ async function parseApiResponse<T>(response: Response): Promise<ApiResponse<T>> 
   return (await response.json()) as ApiResponse<T>;
 }
 
-export function ForgotPasswordForm() {
+export function ForgotPasswordForm({
+  initialEmail = "",
+  initialNotice = "",
+}: ForgotPasswordFormProps) {
   const router = useRouter();
 
   const [step, setStep] = useState<"request" | "reset">("request");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [maskedEmail, setMaskedEmail] = useState("");
   const [otpLength, setOtpLength] = useState(6);
   const [otpValue, setOtpValue] = useState("");
@@ -69,7 +77,7 @@ export function ForgotPasswordForm() {
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState(initialNotice);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
 
@@ -86,6 +94,17 @@ export function ForgotPasswordForm() {
   const canResend = resendAvailableAt
     ? new Date(resendAvailableAt).getTime() <= Date.now()
     : false;
+
+  const signupHref = useMemo(() => {
+    const safeEmail = validateEmail(email) ? normalizeEmail(email) : "";
+    return safeEmail
+      ? `/signup?continueEmail=${encodeURIComponent(safeEmail)}&notice=${encodeURIComponent(
+          "Complete your email verification first."
+        )}`
+      : "/signup";
+  }, [email]);
+
+  const showGoToSignup = errorMessage.toLowerCase().includes("complete email verification first");
 
   async function handleStart(event: FormEvent) {
     event.preventDefault();
@@ -246,8 +265,6 @@ export function ForgotPasswordForm() {
     }
   }
 
-  const showGoToSignup = errorMessage.toLowerCase().includes("complete email verification first");
-
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
       {step === "request" ? (
@@ -282,7 +299,7 @@ export function ForgotPasswordForm() {
                 {showGoToSignup ? (
                   <div className="mt-3">
                     <Link
-                      href="/signup"
+                      href={signupHref}
                       className="inline-flex rounded-2xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50"
                     >
                       Go to Signup
@@ -342,9 +359,6 @@ export function ForgotPasswordForm() {
                 autoFocus
                 disabled={isSubmitting}
               />
-              <p className="mt-3 text-xs text-slate-500">
-                Tip: paste the full OTP into the first box and it will auto-fill.
-              </p>
             </div>
 
             <div>
@@ -358,9 +372,6 @@ export function ForgotPasswordForm() {
                 placeholder="Enter your new password"
                 className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
               />
-              <p className="mt-2 text-xs text-slate-500">
-                Minimum 8 characters, 1 uppercase, 1 lowercase, and 1 number
-              </p>
             </div>
 
             <div>
@@ -378,17 +389,7 @@ export function ForgotPasswordForm() {
 
             {errorMessage ? (
               <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                <p>{errorMessage}</p>
-                {showGoToSignup ? (
-                  <div className="mt-3">
-                    <Link
-                      href="/signup"
-                      className="inline-flex rounded-2xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50"
-                    >
-                      Go to Signup
-                    </Link>
-                  </div>
-                ) : null}
+                {errorMessage}
               </div>
             ) : null}
 

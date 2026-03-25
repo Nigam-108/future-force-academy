@@ -13,7 +13,7 @@ export default function SignupSuccessPage() {
       setSecondsLeft((previous) => {
         if (previous <= 1) {
           window.clearInterval(interval);
-          router.push("/login");
+          router.push("/login?notice=Signup%20completed.%20Please%20login.");
           router.refresh();
           return 0;
         }
@@ -51,7 +51,7 @@ export default function SignupSuccessPage() {
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Link
-            href="/login"
+            href="/login?notice=Signup%20completed.%20Please%20login."
             className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
           >
             Go to Login

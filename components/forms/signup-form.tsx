@@ -172,7 +172,16 @@ async function parseApiResponse<T>(response: Response): Promise<ApiResponse<T>> 
   return result;
 }
 
-export function SignupForm() {
+type SignupFormProps = {
+  initialContinueEmail?: string;
+  initialNotice?: string;
+};
+
+export function SignupForm({
+  initialContinueEmail = "",
+  initialNotice = "",
+}: SignupFormProps) {
+
   const router = useRouter();
 
   const [config, setConfig] = useState<SignupConfigData | null>(null);
@@ -189,8 +198,9 @@ export function SignupForm() {
   const [availability, setAvailability] = useState<SignupAvailabilityData | null>(null);
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
 
-  const [continueEmail, setContinueEmail] = useState("");
-  const [continueMessage, setContinueMessage] = useState("");
+  const [continueEmail, setContinueEmail] = useState(initialContinueEmail);
+const [continueMessage, setContinueMessage] = useState(initialNotice);
+
   const [continueError, setContinueError] = useState("");
   const [isContinuing, setIsContinuing] = useState(false);
 

@@ -1,7 +1,28 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ForgotPasswordForm } from "@/components/forms/forgot-password-form";
+import { AuthPageAlert } from "@/components/auth/auth-page-alert";
+import {
+  getDefaultRedirectPath,
+  getOptionalSession,
+} from "@/server/auth/redirects";
 
-export default function ForgotPasswordPage() {
+export default async function ForgotPasswordPage(props: {
+  searchParams?: Promise<{
+    email?: string;
+    notice?: string;
+  }>;
+}) {
+  const searchParams = (await props.searchParams) ?? {};
+  const session = await getOptionalSession();
+
+  if (session) {
+    redirect(getDefaultRedirectPath(session.role));
+  }
+
+  const initialEmail = searchParams.email?.trim() || "";
+  const notice = searchParams.notice?.trim() || "";
+
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl">
@@ -23,7 +44,12 @@ export default function ForgotPasswordPage() {
           </p>
         </div>
 
-        <ForgotPasswordForm />
+        {notice ? <div className="mb-6"><AuthPageAlert tone="warning" message={notice} /></div> : null}
+
+        <ForgotPasswordForm
+          initialEmail={initialEmail}
+          initialNotice={notice}
+        />
       </div>
     </div>
   );

@@ -18,14 +18,41 @@ type LoginResponse = {
   errors?: unknown;
 };
 
-export function LoginForm() {
+type LoginFormProps = {
+  redirectTo?: string;
+  initialIdentifier?: string;
+  initialNotice?: string;
+};
+
+function sanitizeRedirectTo(value?: string) {
+  if (!value) return undefined;
+  if (!value.startsWith("/")) return undefined;
+  if (value.startsWith("//")) return undefined;
+  if (value.startsWith("/api")) return undefined;
+  return value;
+}
+
+export function LoginForm({
+  redirectTo,
+  initialIdentifier = "",
+  initialNotice = "",
+}: LoginFormProps) {
   const router = useRouter();
 
-  const [identifier, setIdentifier] = useState("");
+  const [identifier, setIdentifier] = useState(initialIdentifier);
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState(initialNotice);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const signupRedirectHref = useMemo(() => {
+    const emailLike = identifier.includes("@") ? identifier.trim().toLowerCase() : "";
+    return emailLike
+      ? `/signup?continueEmail=${encodeURIComponent(emailLike)}&notice=${encodeURIComponent(
+          "Complete your email verification first."
+        )}`
+      : "/signup";
+  }, [identifier]);
 
   const showGoToSignup = useMemo(() => {
     return errorMessage.toLowerCase().includes("complete email verification first");
@@ -59,6 +86,14 @@ export function LoginForm() {
 
       setSuccessMessage("Login successful");
 
+      const safeRedirect = sanitizeRedirectTo(redirectTo);
+
+      if (safeRedirect) {
+        router.push(safeRedirect);
+        router.refresh();
+        return;
+      }
+
       if (result.data.role === "ADMIN" || result.data.role === "SUB_ADMIN") {
         router.push("/admin/dashboard");
         router.refresh();
@@ -88,7 +123,7 @@ export function LoginForm() {
           required
         />
         <p className="mt-2 text-xs text-slate-500">
-          You can login using your email or Indian 10-digit mobile number.
+          Use your email or Indian 10-digit mobile number.
         </p>
       </div>
 
@@ -111,9 +146,9 @@ export function LoginForm() {
           <p>{errorMessage}</p>
 
           {showGoToSignup ? (
-            <div className="mt-3">
+            <div className="mt-3 flex flex-wrap gap-3">
               <Link
-                href="/signup"
+                href={signupRedirectHref}
                 className="inline-flex rounded-2xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50"
               >
                 Go to Signup

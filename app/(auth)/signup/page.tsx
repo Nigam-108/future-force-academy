@@ -1,7 +1,28 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { SignupForm } from "@/components/forms/signup-form";
+import { AuthPageAlert } from "@/components/auth/auth-page-alert";
+import {
+  getDefaultRedirectPath,
+  getOptionalSession,
+} from "@/server/auth/redirects";
 
-export default function SignupPage() {
+export default async function SignupPage(props: {
+  searchParams?: Promise<{
+    continueEmail?: string;
+    notice?: string;
+  }>;
+}) {
+  const searchParams = (await props.searchParams) ?? {};
+  const session = await getOptionalSession();
+
+  if (session) {
+    redirect(getDefaultRedirectPath(session.role));
+  }
+
+  const initialContinueEmail = searchParams.continueEmail?.trim() || "";
+  const notice = searchParams.notice?.trim() || "";
+
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
@@ -24,7 +45,12 @@ export default function SignupPage() {
           </p>
         </div>
 
-        <SignupForm />
+        {notice ? <div className="mb-6"><AuthPageAlert tone="warning" message={notice} /></div> : null}
+
+        <SignupForm
+          initialContinueEmail={initialContinueEmail}
+          initialNotice={notice}
+        />
       </div>
     </div>
   );
