@@ -12,13 +12,10 @@ const secret = new TextEncoder().encode(jwtSecret);
 async function readSession(request: NextRequest) {
   const token = request.cookies.get(cookieName)?.value;
 
-  if (!token) {
-    return null;
-  }
+  if (!token) return null;
 
   try {
     const { payload } = await jwtVerify(token, secret);
-
     return payload as {
       userId: string;
       email: string;
@@ -33,21 +30,21 @@ function getDefaultRedirectPath(role: "STUDENT" | "ADMIN" | "SUB_ADMIN") {
   if (role === "ADMIN" || role === "SUB_ADMIN") {
     return "/admin/dashboard";
   }
-
   return "/student/dashboard";
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
   const isStudentProtected = protectedStudentRoutes.some((route) =>
     pathname.startsWith(route)
   );
+
   const isAdminProtected = protectedAdminRoutes.some((route) =>
     pathname.startsWith(route)
   );
-  const isGuestOnly = guestOnlyRoutes.includes(pathname);
 
+  const isGuestOnly = guestOnlyRoutes.includes(pathname);
   const session = await readSession(request);
 
   if (isGuestOnly && session) {
@@ -56,24 +53,23 @@ export async function middleware(request: NextRequest) {
     );
   }
 
-  if (!isStudentProtected && !isAdminProtected) {
-    return NextResponse.next();
-  }
-
-  if (!session) {
+  if ((isStudentProtected || isAdminProtected) && !session) {
     const loginUrl = new URL("/login", request.url);
-    const redirectTo = `${pathname}${search || ""}`;
+    const redirectTo = `${pathname}${search}`;
     loginUrl.searchParams.set("redirectTo", redirectTo);
-
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isAdminProtected && session.role !== "ADMIN" && session.role !== "SUB_ADMIN") {
+  if (isStudentProtected && session?.role !== "STUDENT") {
     return NextResponse.redirect(new URL("/access-denied", request.url));
   }
 
-  if (isStudentProtected && session.role !== "STUDENT") {
-    return NextResponse.redirect(new URL(getDefaultRedirectPath(session.role), request.url));
+  if (
+    isAdminProtected &&
+    session?.role !== "ADMIN" &&
+    session?.role !== "SUB_ADMIN"
+  ) {
+    return NextResponse.redirect(new URL("/access-denied", request.url));
   }
 
   return NextResponse.next();
@@ -81,11 +77,11 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/student/:path*",
-    "/admin/:path*",
     "/login",
     "/signup",
     "/forgot-password",
     "/signup/success",
+    "/student/:path*",
+    "/admin/:path*",
   ],
 };
