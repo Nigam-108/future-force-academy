@@ -1,21 +1,27 @@
 import { expect, Page } from "@playwright/test";
 
-export async function fillLoginForm(page: Page, input: {
-  identifier: string;
-  password: string;
-}) {
-  const identifierInput =
-    page.getByLabel(/email|mobile|identifier/i).first().or(
-      page.getByPlaceholder(/email|mobile/i).first()
-    );
+export async function fillLoginForm(
+  page: Page,
+  input: { identifier: string; password: string }
+) {
+  const identifierInput = page
+    .getByPlaceholder(/email|10-digit mobile|mobile number/i)
+    .first();
 
+  await expect(identifierInput).toBeVisible();
   await identifierInput.fill(input.identifier);
-  await page.getByLabel(/password/i).fill(input.password);
+
+  const passwordInput = page
+    .getByPlaceholder(/password/i)
+    .first();
+
+  await expect(passwordInput).toBeVisible();
+  await passwordInput.fill(input.password);
 }
 
 export async function submitPrimaryAuthForm(page: Page) {
   const button = page.getByRole("button", {
-    name: /login|sign in|continue|submit|verify/i,
+    name: /login|sign in/i,
   }).first();
 
   await expect(button).toBeVisible();
@@ -23,7 +29,9 @@ export async function submitPrimaryAuthForm(page: Page) {
 }
 
 export async function expectUrlToContain(page: Page, value: string) {
-  await expect(page).toHaveURL(new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  await expect(page).toHaveURL(
+    new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+  );
 }
 
 export async function expectSuccessText(page: Page, text: RegExp | string) {
