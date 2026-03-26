@@ -50,16 +50,17 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         sections: { orderBy: { displayOrder: "asc" } },
         _count: { select: { testQuestions: true } },
         testBatches: {
-          select: {
-            batchId: true,
-            batch: {
-              select: {
-                id: true,
-                status: true,
-              },
-            },
-          },
-        },
+  select: {
+    batchId: true,
+    batch: {
+      select: {
+        id: true,
+        status: true,
+        isPaid: true,
+      },
+    },
+  },
+},
       },
     });
 
