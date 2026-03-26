@@ -276,21 +276,30 @@ export default async function PurchasesPage({
                         : `This free batch is visible to students now. You can enroll it without payment flow once free self-enrollment is added, or admin can manually enroll students.`}
                     </p>
 
-                    <div className="mt-4">
+                                        <div className="mt-4">
                       {batch.isPaid && batch.price != null ? (
                         <BuyFullBatchButton
-  batchId={batch.id}
-  batchTitle={batch.title}
-  price={batch.price}
-  originalPrice={batch.originalPrice}
-  discountPercent={batch.discountPercent}
-  offerEndDate={batch.offerEndDate}
-  priceFormatted={batch.priceFormatted ?? "₹0"}
-  originalPriceFormatted={batch.originalPriceFormatted}
-/>
+                          batchId={batch.id}
+                          batchTitle={batch.title}
+                          price={batch.price}
+                          originalPrice={batch.originalPrice}
+                          discountPercent={batch.discountPercent}
+                          offerEndDate={batch.offerEndDate}
+                          priceFormatted={batch.priceFormatted ?? "₹0"}
+                          originalPriceFormatted={batch.originalPriceFormatted}
+                        />
                       ) : (
-                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                          Visible as a free batch.
+                        <div className="space-y-3">
+                          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                            Visible as a free batch.
+                          </div>
+
+                          <Link
+                            href={`/student/tests?batchId=${batch.id}`}
+                            className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                          >
+                            View Free Batch Tests →
+                          </Link>
                         </div>
                       )}
                     </div>

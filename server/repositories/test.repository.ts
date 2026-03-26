@@ -266,11 +266,22 @@ export async function listStudentVisibleTestRecords(filters: {
   limit: number;
   search?: string;
   mode?: TestMode;
+  batchId?: string;
   userId: string;
 }) {
-  const batchAccessFilter: Prisma.TestWhereInput = {
+    const batchAccessFilter: Prisma.TestWhereInput = {
     OR: [
       { testBatches: { none: {} } },
+      {
+        testBatches: {
+          some: {
+            batch: {
+              isPaid: false,
+              status: "ACTIVE",
+            },
+          },
+        },
+      },
       {
         testBatches: {
           some: {
@@ -360,6 +371,17 @@ export async function listStudentVisibleTestRecords(filters: {
           ]
         : []),
       ...(filters.mode ? [{ mode: filters.mode }] : []),
+      ...(filters.batchId
+        ? [
+            {
+              testBatches: {
+                some: {
+                  batchId: filters.batchId,
+                },
+              },
+            },
+          ]
+        : []),
     ],
   };
 

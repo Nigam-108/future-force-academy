@@ -1,7 +1,6 @@
 import { cookies, headers } from "next/headers";
 
 // ─── Core fetch helper ──────────────────────────────────────────────────────
-
 type InternalApiSuccess<T> = {
   success: true;
   status: number;
@@ -26,10 +25,8 @@ export async function fetchInternalApi<T>(
   try {
     const headerStore = await headers();
     const cookieStore = await cookies();
-
     const host = headerStore.get("host");
-    const protocol =
-      process.env.NODE_ENV === "development" ? "http" : "https";
+    const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
 
     if (!host) {
       return {
@@ -92,7 +89,6 @@ export async function fetchInternalApi<T>(
 }
 
 // ─── Student test types ─────────────────────────────────────────────────────
-
 export type StudentTestMode = "PRACTICE" | "LIVE" | "ASSIGNED";
 export type StudentTestStatus = "AVAILABLE" | "UPCOMING" | "LIVE" | "COMPLETED";
 
@@ -122,6 +118,7 @@ export type StudentTestItem = {
   }>;
   _count?: {
     testQuestions: number;
+    testBatches: number;
   };
   testBatches?: Array<{
     batchId: string;
@@ -134,6 +131,7 @@ export type StudentTestItem = {
   studentStatus: StudentTestStatus;
   isGlobal: boolean;
 };
+
 export type StudentTestDetailItem = StudentTestItem;
 
 type StudentTestsResponse = {
@@ -146,13 +144,13 @@ type StudentTestsResponse = {
 };
 
 // ─── Student test helpers ───────────────────────────────────────────────────
-
 export async function getStudentTests(params: {
   page?: string;
   limit?: string;
   search?: string;
   mode?: StudentTestMode | "";
   studentStatus?: StudentTestStatus | "";
+  batchId?: string;
 }): Promise<InternalApiResult<StudentTestsResponse>> {
   const searchParams = new URLSearchParams();
 
@@ -161,14 +159,13 @@ export async function getStudentTests(params: {
   if (params.search) searchParams.set("search", params.search);
   if (params.mode) searchParams.set("mode", params.mode);
   if (params.studentStatus) searchParams.set("studentStatus", params.studentStatus);
+  if (params.batchId) searchParams.set("batchId", params.batchId);
 
-  return fetchInternalApi<StudentTestsResponse>(
-    `/api/student/tests?${searchParams.toString()}`
-  );
+  return fetchInternalApi(`/api/student/tests?${searchParams.toString()}`);
 }
 
 export async function getStudentTestById(
   testId: string
 ): Promise<InternalApiResult<StudentTestDetailItem>> {
-  return fetchInternalApi<StudentTestDetailItem>(`/api/student/tests/${testId}`);
+  return fetchInternalApi(`/api/student/tests/${testId}`);
 }

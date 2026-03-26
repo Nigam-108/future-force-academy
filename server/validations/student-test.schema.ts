@@ -14,7 +14,11 @@ export const listStudentTestsQuerySchema = z.object({
   search: z.string().optional(),
   mode: z.nativeEnum(TestMode).optional(),
   studentStatus: z.enum(studentTestStatusValues).optional(),
+  batchId: z.string().optional(),
 });
 
-export type ListStudentTestsQueryInput = z.infer<typeof listStudentTestsQuerySchema>;
+export type ListStudentTestsQueryInput = z.infer<
+  typeof listStudentTestsQuerySchema
+>;
+
 export type StudentTestStatus = (typeof studentTestStatusValues)[number];

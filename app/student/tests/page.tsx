@@ -81,10 +81,13 @@ function buildPageHref(
   const search = getSingleValue(currentSearchParams.search);
   const mode = getSingleValue(currentSearchParams.mode);
   const studentStatus = getSingleValue(currentSearchParams.studentStatus);
+  const batchId = getSingleValue(currentSearchParams.batchId);
 
   if (search) params.set("search", search);
   if (mode) params.set("mode", mode);
   if (studentStatus) params.set("studentStatus", studentStatus);
+  if (batchId) params.set("batchId", batchId);
+
   params.set("page", String(nextPage));
   params.set("limit", "10");
 
@@ -218,19 +221,20 @@ export default async function StudentTestsPage({
 
   const page = getSingleValue(resolvedSearchParams.page) || "1";
   const limit = getSingleValue(resolvedSearchParams.limit) || "10";
-  const search = getSingleValue(resolvedSearchParams.search) || "";
+    const search = getSingleValue(resolvedSearchParams.search) || "";
   const mode = getSingleValue(resolvedSearchParams.mode) || "";
-  const studentStatus =
-    getSingleValue(resolvedSearchParams.studentStatus) || "";
+  const studentStatus = getSingleValue(resolvedSearchParams.studentStatus) || "";
+  const batchId = getSingleValue(resolvedSearchParams.batchId) || "";
 
   const [result, accessResult] = await Promise.all([
-    getStudentTests({
-      page,
-      limit,
-      search,
-      mode: mode as StudentTestMode | "",
-      studentStatus: studentStatus as StudentTestStatus | "",
-    }),
+          getStudentTests({
+        page,
+        limit,
+        search,
+        mode: mode as StudentTestMode | "",
+        studentStatus: studentStatus as StudentTestStatus | "",
+        batchId,
+      }),
     fetchInternalApi<AccessSummary>("/api/student/access"),
   ]);
 
@@ -278,6 +282,18 @@ export default async function StudentTestsPage({
               View Enrollments
             </Link>
           </div>
+        </div>
+      ) : null}
+
+            {batchId ? (
+        <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+          Showing tests for the selected batch only.
+          <Link
+            href="/student/tests"
+            className="ml-2 font-semibold underline underline-offset-2"
+          >
+            Clear batch filter
+          </Link>
         </div>
       ) : null}
 
