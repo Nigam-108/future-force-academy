@@ -2,7 +2,9 @@ import { TestStructureType } from "@prisma/client";
 import { AppError } from "@/server/utils/errors";
 import {
   createAssignedTestQuestions,
+  deleteAllAssignedTestQuestions,
   deleteAssignedTestQuestionById,
+  deleteSelectedAssignedTestQuestions,
   findQuestionsByIds,
   findSectionsByIds,
   findTestForQuestionAssignment,
@@ -12,6 +14,7 @@ import {
 } from "@/server/repositories/test-question.repository";
 import type {
   AssignTestQuestionsInput,
+  DeleteAssignedQuestionsInput,
   UpdateAssignedTestQuestionInput,
 } from "@/server/validations/test-question.schema";
 
@@ -257,6 +260,66 @@ export async function removeAssignedQuestionFromTest(
     },
     deletedAssignmentId: result.deleted.id,
     deletedQuestionId: result.deleted.questionId,
+    remainingAssigned: result.totals.totalQuestions,
+  };
+}
+
+export async function removeSelectedAssignedQuestionsFromTest(
+  testId: string,
+  input: Extract<DeleteAssignedQuestionsInput, { mode: "selected" }>
+) {
+  const test = await findTestForQuestionAssignment(testId);
+
+  if (!test) {
+    throw new AppError("Test not found", 404);
+  }
+
+  const existingIds = new Set(test.testQuestions.map((item) => item.id));
+
+  const missingId = input.assignmentIds.find((id) => !existingIds.has(id));
+
+  if (missingId) {
+    throw new AppError("One or more selected assigned questions were not found", 404);
+  }
+
+  const result = await deleteSelectedAssignedTestQuestions(
+    test.id,
+    input.assignmentIds
+  );
+
+  return {
+    test: {
+      id: test.id,
+      title: test.title,
+      slug: test.slug,
+      structureType: test.structureType,
+      totalQuestions: result.totals.totalQuestions,
+      totalMarks: result.totals.totalMarks,
+    },
+    deletedCount: result.deletedCount,
+    remainingAssigned: result.totals.totalQuestions,
+  };
+}
+
+export async function removeAllAssignedQuestionsFromTest(testId: string) {
+  const test = await findTestForQuestionAssignment(testId);
+
+  if (!test) {
+    throw new AppError("Test not found", 404);
+  }
+
+  const result = await deleteAllAssignedTestQuestions(test.id);
+
+  return {
+    test: {
+      id: test.id,
+      title: test.title,
+      slug: test.slug,
+      structureType: test.structureType,
+      totalQuestions: result.totals.totalQuestions,
+      totalMarks: result.totals.totalMarks,
+    },
+    deletedCount: result.deletedCount,
     remainingAssigned: result.totals.totalQuestions,
   };
 }

@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type QuestionType =
   | "SINGLE_CORRECT"
@@ -74,6 +76,19 @@ type AssignedQuestionsResponse = {
   totalAssigned: number;
 };
 
+type DeleteAssignedQuestionsResponse = {
+  test: {
+    id: string;
+    title: string;
+    slug: string;
+    structureType: TestStructureType;
+    totalQuestions?: number;
+    totalMarks?: number;
+  };
+  deletedCount: number;
+  remainingAssigned: number;
+};
+
 type TestSection = {
   id: string;
   title: string;
@@ -99,9 +114,6 @@ type Props = {
 const DEFAULT_POSITIVE_MARKS = "1";
 const DEFAULT_NEGATIVE_MARKS = "0.25";
 
-/**
- * Trims long question text for cards / tray rows.
- */
 function truncateText(text: string, limit = 140) {
   if (text.length <= limit) {
     return text;
@@ -149,12 +161,14 @@ async function apiPost<T>(url: string, body: unknown): Promise<ApiResponse<T>> {
   };
 }
 
-async function apiDelete<T>(url: string): Promise<ApiResponse<T>> {
+async function apiDelete<T>(url: string, body?: unknown): Promise<ApiResponse<T>> {
   const response = await fetch(url, {
     method: "DELETE",
     headers: {
       Accept: "application/json",
+      ...(body ? { "Content-Type": "application/json" } : {}),
     },
+    ...(body ? { body: JSON.stringify(body) } : {}),
   });
 
   const json = (await response.json().catch(() => null)) as ApiResponse<T> | null;
@@ -173,6 +187,8 @@ export function TestQuestionAssignmentClient({
   structureType,
   sections,
 }: Props) {
+  const router = useRouter();
+
   const [assigned, setAssigned] = useState<AssignedQuestionItem[]>([]);
   const [assignedLoading, setAssignedLoading] = useState(true);
   const [rowAction, setRowAction] = useState<RowActionState>(null);
@@ -180,96 +196,64 @@ export function TestQuestionAssignmentClient({
   const [questionPool, setQuestionPool] = useState<AvailableQuestion[]>([]);
   const [questionPoolLoading, setQuestionPoolLoading] = useState(true);
 
-  /**
-   * searchInput:
-   * - the text currently typed by admin
-   *
-   * appliedSearch:
-   * - the text currently used to fetch visible results
-   *
-   * This separation gives better search UX and makes refresh behavior predictable.
-   */
   const [searchInput, setSearchInput] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
 
-  /**
-   * selectedQuestionIds:
-   * - persistent selection across multiple searches
-   * - the actual source used for tray assignment
-   */
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
-
-  /**
-   * selectedQuestionMap:
-   * - stores selected question objects
-   * - allows tray rendering even when selected questions are no longer visible
-   *   in the current filtered question bank result set
-   */
   const [selectedQuestionMap, setSelectedQuestionMap] = useState<
     Record<string, AvailableQuestion>
   >({});
+
+  const [selectedAssignmentIds, setSelectedAssignmentIds] = useState<string[]>([]);
+  const [deleteSuccessMessage, setDeleteSuccessMessage] = useState<string | null>(
+    null
+  );
+  const [isDeletingSelected, setIsDeletingSelected] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   const [sectionId, setSectionId] = useState("");
   const [positiveMarks, setPositiveMarks] = useState(DEFAULT_POSITIVE_MARKS);
   const [negativeMarks, setNegativeMarks] = useState(DEFAULT_NEGATIVE_MARKS);
   const [submitting, setSubmitting] = useState(false);
-
-  /**
-   * Separate loading state for one-click visible assignment.
-   */
   const [assigningVisible, setAssigningVisible] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  /**
-   * Assigned question IDs should never appear as assignable in the bank.
-   */
   const assignedQuestionIds = useMemo(
     () => new Set(assigned.map((item) => item.questionId)),
     [assigned]
   );
 
-  /**
-   * Visible question pool after removing already-assigned items.
-   */
   const visibleQuestionPool = useMemo(
     () => questionPool.filter((item) => !assignedQuestionIds.has(item.id)),
     [questionPool, assignedQuestionIds]
   );
 
-  /**
-   * Selected question objects rendered in the tray.
-   */
   const selectedQuestions = useMemo(() => {
     return selectedQuestionIds
       .map((id) => selectedQuestionMap[id])
       .filter(Boolean);
   }, [selectedQuestionIds, selectedQuestionMap]);
 
-  /**
-   * IDs for only the currently visible search result set.
-   */
   const visibleSelectableQuestionIds = useMemo(
     () => visibleQuestionPool.map((item) => item.id),
     [visibleQuestionPool]
   );
 
-  /**
-   * Whether every currently visible result is already selected.
-   */
   const allVisibleSelected =
     visibleSelectableQuestionIds.length > 0 &&
     visibleSelectableQuestionIds.every((id) => selectedQuestionIds.includes(id));
 
+  const allAssignedSelected =
+    assigned.length > 0 && assigned.every((item) => selectedAssignmentIds.includes(item.id));
+
   function clearFeedback() {
     setErrorMessage(null);
     setSuccessMessage(null);
+    setDeleteSuccessMessage(null);
   }
 
-  /**
-   * Keeps tray selection persistent across searches.
-   */
   function toggleQuestionSelection(question: AvailableQuestion) {
     clearFeedback();
 
@@ -292,9 +276,6 @@ export function TestQuestionAssignmentClient({
     });
   }
 
-  /**
-   * Adds every currently visible result into the persistent tray.
-   */
   function selectAllVisible() {
     clearFeedback();
 
@@ -313,9 +294,6 @@ export function TestQuestionAssignmentClient({
     });
   }
 
-  /**
-   * Clears only current search result selection from tray.
-   */
   function clearVisibleSelection() {
     clearFeedback();
 
@@ -332,18 +310,12 @@ export function TestQuestionAssignmentClient({
     });
   }
 
-  /**
-   * Clears full tray.
-   */
   function clearAllSelection() {
     clearFeedback();
     setSelectedQuestionIds([]);
     setSelectedQuestionMap({});
   }
 
-  /**
-   * Removes one selected question directly from tray.
-   */
   function removeSelectedQuestion(questionId: string) {
     clearFeedback();
 
@@ -356,6 +328,27 @@ export function TestQuestionAssignmentClient({
       delete next[questionId];
       return next;
     });
+  }
+
+  function toggleAssignedSelection(assignmentId: string) {
+    clearFeedback();
+
+    setSelectedAssignmentIds((previous) =>
+      previous.includes(assignmentId)
+        ? previous.filter((id) => id !== assignmentId)
+        : [...previous, assignmentId]
+    );
+  }
+
+  function toggleSelectAllAssigned() {
+    clearFeedback();
+
+    if (allAssignedSelected) {
+      setSelectedAssignmentIds([]);
+      return;
+    }
+
+    setSelectedAssignmentIds(assigned.map((item) => item.id));
   }
 
   async function loadAssigned() {
@@ -373,9 +366,6 @@ export function TestQuestionAssignmentClient({
 
       setAssigned(response.data.items);
 
-      /**
-       * Auto-remove anything from tray that has now become assigned.
-       */
       const assignedIds = new Set(response.data.items.map((item) => item.questionId));
 
       setSelectedQuestionIds((previous) =>
@@ -384,18 +374,24 @@ export function TestQuestionAssignmentClient({
 
       setSelectedQuestionMap((previous) => {
         const next = { ...previous };
+
         Object.keys(next).forEach((id) => {
           if (assignedIds.has(id)) {
             delete next[id];
           }
         });
+
         return next;
       });
+
+      setSelectedAssignmentIds((previous) =>
+        previous.filter((assignmentId) =>
+          response.data?.items.some((item) => item.id === assignmentId)
+        )
+      );
     } catch (error) {
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to load assigned questions."
+        error instanceof Error ? error.message : "Failed to load assigned questions."
       );
     } finally {
       setAssignedLoading(false);
@@ -428,16 +424,15 @@ export function TestQuestionAssignmentClient({
 
       setQuestionPool(response.data.items);
 
-      /**
-       * Refresh selectedQuestionMap for any selected items now visible.
-       */
       setSelectedQuestionMap((previous) => {
         const next = { ...previous };
+
         response.data?.items.forEach((item) => {
           if (selectedQuestionIds.includes(item.id)) {
             next[item.id] = item;
           }
         });
+
         return next;
       });
     } catch (error) {
@@ -464,9 +459,6 @@ export function TestQuestionAssignmentClient({
     await loadQuestionPool(searchInput);
   }
 
-  /**
-   * Shared validation before any assignment action.
-   */
   function validateAssignmentContext(selectedCount: number) {
     if (selectedCount === 0) {
       setErrorMessage("Select at least one question first.");
@@ -488,9 +480,6 @@ export function TestQuestionAssignmentClient({
     return true;
   }
 
-  /**
-   * Assigns all currently selected tray items.
-   */
   async function handleAssignSelected() {
     if (!validateAssignmentContext(selectedQuestionIds.length)) {
       return;
@@ -511,7 +500,7 @@ export function TestQuestionAssignmentClient({
         })),
       };
 
-      const response = await apiPost<AssignedQuestionsResponse>(
+      const response = await apiPost<unknown>(
         `/api/admin/tests/${testId}/questions`,
         payload
       );
@@ -531,23 +520,13 @@ export function TestQuestionAssignmentClient({
       await loadQuestionPool(appliedSearch);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to assign questions to test."
+        error instanceof Error ? error.message : "Failed to assign questions to test."
       );
     } finally {
       setSubmitting(false);
     }
   }
 
-  /**
-   * One-click action:
-   * assigns every currently visible search result directly,
-   * without first moving them into the persistent tray.
-   *
-   * This is the fastest workflow when admin wants:
-   * "whatever is visible right now -> assign all"
-   */
   async function handleAssignAllVisible() {
     if (!validateAssignmentContext(visibleSelectableQuestionIds.length)) {
       return;
@@ -568,7 +547,7 @@ export function TestQuestionAssignmentClient({
         })),
       };
 
-      const response = await apiPost<AssignedQuestionsResponse>(
+      const response = await apiPost<unknown>(
         `/api/admin/tests/${testId}/questions`,
         payload
       );
@@ -583,9 +562,6 @@ export function TestQuestionAssignmentClient({
         `${visibleSelectableQuestionIds.length} visible question(s) assigned successfully.`
       );
 
-      /**
-       * Remove visible items from tray if any were already selected there.
-       */
       setSelectedQuestionIds((previous) =>
         previous.filter((id) => !visibleSelectableQuestionIds.includes(id))
       );
@@ -642,9 +618,7 @@ export function TestQuestionAssignmentClient({
       );
 
       if (!response.success) {
-        throw new Error(
-          response.message || "Failed to remove assigned question row."
-        );
+        throw new Error(response.message || "Failed to remove assigned question row.");
       }
 
       setSuccessMessage("Assigned question removed successfully.");
@@ -662,10 +636,109 @@ export function TestQuestionAssignmentClient({
     }
   }
 
+  async function handleDeleteSelectedAssigned() {
+    if (selectedAssignmentIds.length === 0) {
+      setErrorMessage("Select at least one assigned question first.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete ${selectedAssignmentIds.length} selected assigned question(s) from this test?\n\nOnly test assignments will be removed. Question bank records will remain safe.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsDeletingSelected(true);
+    clearFeedback();
+
+    try {
+      const response = await apiDelete<DeleteAssignedQuestionsResponse>(
+        `/api/admin/tests/${testId}/questions`,
+        {
+          mode: "selected",
+          assignmentIds: selectedAssignmentIds,
+        }
+      );
+
+      if (!response.success || !response.data) {
+        throw new Error(
+          response.message || "Failed to delete selected assigned questions."
+        );
+      }
+
+      setSelectedAssignmentIds([]);
+      setDeleteSuccessMessage(
+        `${response.data.deletedCount} selected assigned question(s) were removed from this test.`
+      );
+
+      await loadAssigned();
+      await loadQuestionPool(appliedSearch);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to delete selected assigned questions."
+      );
+    } finally {
+      setIsDeletingSelected(false);
+    }
+  }
+
+  async function handleDeleteAllAssigned() {
+    if (assigned.length === 0) {
+      setErrorMessage("No assigned questions are available to delete.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete ALL assigned questions from "${testTitle}"?\n\nThis will remove only test assignments, not question bank records.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsDeletingAll(true);
+    clearFeedback();
+
+    try {
+      const response = await apiDelete<DeleteAssignedQuestionsResponse>(
+        `/api/admin/tests/${testId}/questions`,
+        {
+          mode: "all",
+        }
+      );
+
+      if (!response.success || !response.data) {
+        throw new Error(
+          response.message || "Failed to delete all assigned questions."
+        );
+      }
+
+      setSelectedAssignmentIds([]);
+      setDeleteSuccessMessage(
+        `${response.data.deletedCount} assigned question(s) were removed from this test.`
+      );
+
+      await loadAssigned();
+      await loadQuestionPool(appliedSearch);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to delete all assigned questions."
+      );
+    } finally {
+      setIsDeletingAll(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {errorMessage ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {errorMessage}
         </div>
       ) : null}
@@ -676,38 +749,47 @@ export function TestQuestionAssignmentClient({
         </div>
       ) : null}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      {deleteSuccessMessage ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          <p>{deleteSuccessMessage}</p>
+
+          {assigned.length === 0 ? (
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => router.push(`/admin/tests/${testId}/edit`)}
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+              >
+                Back to Edit Test
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <section className="rounded-3xl border bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-medium uppercase tracking-wide text-slate-500">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Assignment Console
             </p>
-            <h2 className="mt-1 text-2xl font-semibold text-slate-900">
+            <h2 className="mt-1 text-xl font-semibold text-slate-900">
               {testTitle}
             </h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Structure: <span className="font-medium">{structureType}</span>
-            </p>
-            <p className="mt-2 text-sm text-slate-600">
-              Question order is randomized automatically on the backend.
+            <p className="mt-1 text-sm text-slate-600">
+              Structure: {structureType} • Question order is randomized automatically on the backend.
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
-              <p className="text-xs uppercase tracking-wide text-slate-500">
-                Currently Assigned
-              </p>
-              <p className="mt-1 text-2xl font-semibold text-slate-900">
-                {assigned.length}
-              </p>
+          <div className="flex gap-3">
+            <div className="rounded-2xl border bg-slate-50 px-4 py-3 text-center">
+              <p className="text-xs font-medium text-slate-500">Currently Assigned</p>
+              <p className="mt-1 text-lg font-semibold text-slate-900">{assigned.length}</p>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
-              <p className="text-xs uppercase tracking-wide text-slate-500">
-                Selected In Tray
-              </p>
-              <p className="mt-1 text-2xl font-semibold text-slate-900">
+            <div className="rounded-2xl border bg-slate-50 px-4 py-3 text-center">
+              <p className="text-xs font-medium text-slate-500">Selected In Tray</p>
+              <p className="mt-1 text-lg font-semibold text-slate-900">
                 {selectedQuestionIds.length}
               </p>
             </div>
@@ -715,8 +797,8 @@ export function TestQuestionAssignmentClient({
         </div>
 
         {structureType === "SECTIONAL" ? (
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <h3 className="text-sm font-semibold text-slate-900">Sections</h3>
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="text-sm font-semibold text-slate-800">Sections</h3>
 
             {sections.length === 0 ? (
               <p className="mt-2 text-sm text-slate-600">
@@ -727,10 +809,12 @@ export function TestQuestionAssignmentClient({
                 {sections.map((section) => (
                   <div
                     key={section.id}
-                    className="rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                    className="rounded-2xl border border-slate-200 bg-white p-3"
                   >
-                    <p className="font-medium text-slate-900">{section.title}</p>
-                    <p className="mt-1 text-xs text-slate-600">
+                    <p className="text-sm font-semibold text-slate-900">
+                      {section.title}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
                       Order {section.displayOrder} • {section.totalQuestions} questions
                     </p>
                   </div>
@@ -741,264 +825,24 @@ export function TestQuestionAssignmentClient({
         ) : null}
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">
-              Assign Questions
-            </h3>
-            <p className="mt-1 text-sm text-slate-600">
-              Use the tray for multi-search selection, or assign the whole current visible result set in one click.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
-            <p className="text-xs uppercase tracking-wide text-slate-500">
-              Visible Results
-            </p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">
-              {visibleQuestionPool.length}
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <input
-            type="number"
-            min={0}
-            step="0.25"
-            value={positiveMarks}
-            onChange={(event) => setPositiveMarks(event.target.value)}
-            className="rounded-xl border px-4 py-3 text-sm"
-            placeholder="Positive marks"
-          />
-
-          <input
-            type="number"
-            min={0}
-            step="0.25"
-            value={negativeMarks}
-            onChange={(event) => setNegativeMarks(event.target.value)}
-            className="rounded-xl border px-4 py-3 text-sm"
-            placeholder="Negative marks"
-          />
-
-          {structureType === "SECTIONAL" ? (
-            <select
-              value={sectionId}
-              onChange={(event) => setSectionId(event.target.value)}
-              className="rounded-xl border px-4 py-3 text-sm"
-            >
-              <option value="">Select section</option>
-              {sections.map((section) => (
-                <option key={section.id} value={section.id}>
-                  {section.title}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <div className="rounded-xl border border-dashed px-4 py-3 text-sm text-slate-500">
-              Single test — no section mapping needed
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={() => void handleAssignSelected()}
-            disabled={selectedQuestionIds.length === 0 || submitting}
-            className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-          >
-            {submitting ? "Assigning Tray..." : "Assign Selected Tray"}
-          </button>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => void handleAssignAllVisible()}
-            disabled={visibleSelectableQuestionIds.length === 0 || assigningVisible}
-            className="rounded-xl border border-emerald-200 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {assigningVisible ? "Assigning Visible..." : "Assign All Visible"}
-          </button>
-
-          <button
-            type="button"
-            onClick={allVisibleSelected ? clearVisibleSelection : selectAllVisible}
-            disabled={visibleSelectableQuestionIds.length === 0}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {allVisibleSelected ? "Clear Visible Selection" : "Add Visible To Tray"}
-          </button>
-
-          <button
-            type="button"
-            onClick={clearAllSelection}
-            disabled={selectedQuestionIds.length === 0}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Clear Full Tray
-          </button>
-        </div>
-
-        <p className="mt-4 text-sm text-slate-500">
-          Default marks are set to +1 and -0.25 for fast MCQ paper building, but you can still change them before assigning.
-        </p>
-
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h4 className="text-sm font-semibold text-slate-900">
-                Selected Questions Tray
-              </h4>
-              <p className="mt-1 text-xs text-slate-600">
-                Selection survives across multiple searches and refreshes.
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
-              Tray Count: {selectedQuestionIds.length}
-            </div>
-          </div>
-
-          {selectedQuestions.length === 0 ? (
-            <p className="mt-4 text-sm text-slate-600">
-              No selected questions yet. Search below and add results to the tray.
-            </p>
-          ) : (
-            <div className="mt-4 space-y-3">
-              {selectedQuestions.map((question, index) => (
-                <div
-                  key={question.id}
-                  className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Selected #{index + 1}
-                    </p>
-                    <h5 className="mt-1 text-sm font-semibold text-slate-900">
-                      {truncateText(question.questionText, 160)}
-                    </h5>
-                    <p className="mt-1 text-xs text-slate-600">
-                      Correct: {question.correctAnswer || "—"}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => removeSelectedQuestion(question.id)}
-                    className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-medium text-rose-700 hover:bg-rose-50"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-lg font-semibold text-slate-900">
-            Already Assigned Questions
-          </h3>
-
-          <button
-            type="button"
-            onClick={() => void loadAssigned()}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Refresh
-          </button>
-        </div>
-
-        {assignedLoading ? (
-          <p className="text-sm text-slate-600">Loading assigned questions...</p>
-        ) : assigned.length === 0 ? (
-          <p className="text-sm text-slate-600">
-            No questions are assigned to this test yet.
-          </p>
-        ) : (
-          <div className="space-y-4">
-            {assigned.map((item) => {
-              const rowBusy = rowAction?.id === item.id;
-
-              return (
-                <div
-                  key={item.id}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="space-y-2">
-                      <h4 className="text-base font-semibold text-slate-900">
-                        #{item.displayOrder} — {truncateText(item.question.questionText, 160)}
-                      </h4>
-
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700">
-                          +{item.positiveMarks ?? "—"}
-                        </span>
-                        <span className="rounded-full bg-rose-100 px-3 py-1 text-rose-700">
-                          -{item.negativeMarks ?? "—"}
-                        </span>
-                        <span className="rounded-full bg-slate-200 px-3 py-1 text-slate-700">
-                          Correct: {item.question.correctAnswer || "—"}
-                        </span>
-                        {item.section ? (
-                          <span className="rounded-full bg-sky-100 px-3 py-1 text-sky-700">
-                            Section: {item.section.title}
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => void handleAssignedDelete(item.id)}
-                      disabled={rowBusy}
-                      className="rounded-xl border border-rose-200 px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {rowBusy ? "Removing..." : "Remove"}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">Question Bank</h3>
-            <p className="mt-1 text-sm text-slate-600">
-              Search active questions, keep selection across searches, and assign either the tray or the entire visible search result set.
-            </p>
+      <section className="rounded-3xl border bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[240px] flex-1 space-y-2">
+            <label className="text-sm font-semibold text-slate-800">
+              Search Question Bank
+            </label>
+            <input
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Search active questions..."
+              className="w-full rounded-2xl border px-4 py-3"
+            />
           </div>
 
           <button
             type="button"
-            onClick={() => void loadQuestionPool(appliedSearch)}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Refresh Results
-          </button>
-        </div>
-
-        <div className="mb-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
-          <input
-            value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            className="rounded-xl border px-4 py-3"
-            placeholder="Search question text"
-          />
-
-          <button
-            type="button"
-            onClick={() => void handleSearch()}
-            className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+            onClick={handleSearch}
+            className="rounded-xl border px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
             Search
           </button>
@@ -1010,68 +854,337 @@ export function TestQuestionAssignmentClient({
               setAppliedSearch("");
               void loadQuestionPool("");
             }}
-            className="rounded-xl border px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            className="rounded-xl border px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
-            Clear Search
+            Reset
           </button>
         </div>
 
-        <div className="mb-4 flex flex-wrap gap-3">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700">
-            Visible Results: {visibleQuestionPool.length}
-          </div>
+        <div className="mt-5 grid gap-4 lg:grid-cols-[1.4fr_0.9fr]">
+          <div className="rounded-2xl border p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Available Questions
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Already-assigned questions are automatically hidden here.
+                </p>
+              </div>
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700">
-            Selected Overall: {selectedQuestionIds.length}
-          </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={selectAllVisible}
+                  disabled={visibleQuestionPool.length === 0 || allVisibleSelected}
+                  className="rounded-xl border px-3 py-2 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Select All Visible
+                </button>
 
-          {appliedSearch ? (
-            <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm text-sky-700">
-              Current Search: {appliedSearch}
+                <button
+                  type="button"
+                  onClick={clearVisibleSelection}
+                  disabled={visibleSelectableQuestionIds.length === 0}
+                  className="rounded-xl border px-3 py-2 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Clear Visible
+                </button>
+              </div>
             </div>
-          ) : null}
+
+            {questionPoolLoading ? (
+              <p className="text-sm text-slate-500">Loading question bank...</p>
+            ) : visibleQuestionPool.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                No visible active questions found for the current search.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {visibleQuestionPool.map((question) => {
+                  const isSelected = selectedQuestionIds.includes(question.id);
+
+                  return (
+                    <div
+                      key={question.id}
+                      className="rounded-2xl border border-slate-200 p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {truncateText(question.questionText, 180)}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {question.type} • {question.difficulty} • {question.status}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => toggleQuestionSelection(question)}
+                          className={`rounded-xl px-3 py-2 text-xs font-semibold ${
+                            isSelected
+                              ? "bg-slate-900 text-white"
+                              : "border text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          {isSelected ? "Selected" : "Select"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border p-4">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">
+                Selected Tray
+              </h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Selection stays across searches until you clear or assign.
+              </p>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {structureType === "SECTIONAL" ? (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">
+                    Assign To Section
+                  </label>
+                  <select
+                    value={sectionId}
+                    onChange={(event) => setSectionId(event.target.value)}
+                    className="w-full rounded-2xl border px-4 py-3"
+                  >
+                    <option value="">Select section</option>
+                    {sections.map((section) => (
+                      <option key={section.id} value={section.id}>
+                        {section.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">
+                    Positive Marks
+                  </label>
+                  <input
+                    value={positiveMarks}
+                    onChange={(event) => setPositiveMarks(event.target.value)}
+                    className="w-full rounded-2xl border px-4 py-3"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">
+                    Negative Marks
+                  </label>
+                  <input
+                    value={negativeMarks}
+                    onChange={(event) => setNegativeMarks(event.target.value)}
+                    className="w-full rounded-2xl border px-4 py-3"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleAssignSelected}
+                  disabled={selectedQuestionIds.length === 0 || submitting}
+                  className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  {submitting ? "Assigning..." : `Assign Selected (${selectedQuestionIds.length})`}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleAssignAllVisible}
+                  disabled={visibleSelectableQuestionIds.length === 0 || assigningVisible}
+                  className="rounded-xl border px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {assigningVisible
+                    ? "Assigning Visible..."
+                    : `Assign All Visible (${visibleSelectableQuestionIds.length})`}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={clearAllSelection}
+                  disabled={selectedQuestionIds.length === 0}
+                  className="rounded-xl border px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Clear Tray
+                </button>
+              </div>
+
+              {selectedQuestions.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  No questions selected yet.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {selectedQuestions.map((question) => (
+                    <div
+                      key={question.id}
+                      className="rounded-2xl border border-slate-200 p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {truncateText(question.questionText, 120)}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {question.type} • {question.difficulty}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => removeSelectedQuestion(question.id)}
+                          className="text-xs font-semibold text-red-600 hover:text-red-700"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">
+              Assigned Questions
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Remove individual rows, bulk-delete selected assignments, or clear all assignments from this test.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleDeleteSelectedAssigned}
+              disabled={selectedAssignmentIds.length === 0 || isDeletingSelected}
+              className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isDeletingSelected
+                ? "Deleting Selected..."
+                : `Delete Selected (${selectedAssignmentIds.length})`}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDeleteAllAssigned}
+              disabled={assigned.length === 0 || isDeletingAll}
+              className="rounded-xl border border-red-300 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isDeletingAll ? "Deleting All..." : "Delete All from This Test"}
+            </button>
+
+            <Link
+              href={`/admin/tests/${testId}/edit`}
+              className="rounded-xl border px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Edit Test
+            </Link>
+          </div>
         </div>
 
-        {questionPoolLoading ? (
-          <p className="text-sm text-slate-600">Loading question bank...</p>
-        ) : visibleQuestionPool.length === 0 ? (
-          <p className="text-sm text-slate-600">
-            No unassigned active questions matched the current search.
-          </p>
-        ) : (
-          <div className="grid gap-4 xl:grid-cols-2">
-            {visibleQuestionPool.map((question) => {
-              const checked = selectedQuestionIds.includes(question.id);
+        <div className="mt-4 overflow-x-auto">
+          {assignedLoading ? (
+            <p className="text-sm text-slate-500">Loading assigned questions...</p>
+          ) : assigned.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              No questions are assigned to this test yet.
+            </p>
+          ) : (
+            <table className="min-w-full border-separate border-spacing-y-2">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={allAssignedSelected}
+                      onChange={toggleSelectAllAssigned}
+                      aria-label="Select all assigned questions"
+                    />
+                  </th>
+                  <th className="px-3 py-2">Order</th>
+                  <th className="px-3 py-2">Question</th>
+                  <th className="px-3 py-2">Section</th>
+                  <th className="px-3 py-2">Marks</th>
+                  <th className="px-3 py-2">Actions</th>
+                </tr>
+              </thead>
 
-              return (
-                <label
-                  key={question.id}
-                  className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition ${
-                    checked
-                      ? "border-slate-900 bg-slate-50"
-                      : "border-slate-200 bg-white"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleQuestionSelection(question)}
-                    className="mt-1 h-4 w-4"
-                  />
+              <tbody>
+                {assigned.map((item) => (
+                  <tr key={item.id} className="rounded-2xl border bg-slate-50">
+                    <td className="px-3 py-3 align-top">
+                      <input
+                        type="checkbox"
+                        checked={selectedAssignmentIds.includes(item.id)}
+                        onChange={() => toggleAssignedSelection(item.id)}
+                        aria-label={`Select assigned question ${item.id}`}
+                      />
+                    </td>
 
-                  <div className="min-w-0 flex-1">
-                    <h4 className="text-base font-semibold text-slate-900">
-                      {truncateText(question.questionText, 180)}
-                    </h4>
-                    <p className="mt-2 text-sm text-slate-600">
-                      Correct: {question.correctAnswer || "—"}
-                    </p>
-                  </div>
-                </label>
-              );
-            })}
-          </div>
-        )}
+                    <td className="px-3 py-3 align-top text-sm font-medium text-slate-700">
+                      {item.displayOrder}
+                    </td>
+
+                    <td className="px-3 py-3 align-top">
+                      <p className="text-sm font-semibold text-slate-900">
+                        {truncateText(item.question.questionText, 160)}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {item.question.type} • {item.question.difficulty} • {item.question.status}
+                      </p>
+                    </td>
+
+                    <td className="px-3 py-3 align-top text-sm text-slate-700">
+                      {item.section ? item.section.title : "—"}
+                    </td>
+
+                    <td className="px-3 py-3 align-top text-sm text-slate-700">
+                      +{item.positiveMarks ?? "—"} / -{item.negativeMarks ?? "—"}
+                    </td>
+
+                    <td className="px-3 py-3 align-top">
+                      <button
+                        type="button"
+                        onClick={() => handleAssignedDelete(item.id)}
+                        disabled={rowAction?.id === item.id}
+                        className="text-sm font-semibold text-red-600 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {rowAction?.id === item.id ? "Removing..." : "Remove"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </section>
     </div>
   );

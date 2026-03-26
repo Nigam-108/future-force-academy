@@ -287,3 +287,52 @@ export async function deleteAssignedTestQuestionById(
     };
   });
 }
+
+export async function deleteSelectedAssignedTestQuestions(
+  testId: string,
+  assignmentIds: string[]
+) {
+  return prisma.$transaction(async (tx) => {
+    const deleted = await tx.testQuestion.deleteMany({
+      where: {
+        testId,
+        id: {
+          in: assignmentIds,
+        },
+      },
+    });
+
+    const remainingRows = await tx.testQuestion.findMany({
+      where: { testId },
+      orderBy: { displayOrder: "asc" },
+      select: { id: true },
+    });
+
+    await writeDisplayOrder(
+      tx,
+      remainingRows.map((item) => item.id)
+    );
+
+    const totals = await syncTestTotals(tx, testId);
+
+    return {
+      deletedCount: deleted.count,
+      totals,
+    };
+  });
+}
+
+export async function deleteAllAssignedTestQuestions(testId: string) {
+  return prisma.$transaction(async (tx) => {
+    const deleted = await tx.testQuestion.deleteMany({
+      where: { testId },
+    });
+
+    const totals = await syncTestTotals(tx, testId);
+
+    return {
+      deletedCount: deleted.count,
+      totals,
+    };
+  });
+}

@@ -38,18 +38,28 @@ export const assignTestQuestionsSchema = z
     }
   });
 
-export const updateAssignedTestQuestionSchema = z
-  .object({
-    sectionId: sectionIdSchema,
-    positiveMarks: marksSchema,
-    negativeMarks: marksSchema,
-  })
-  .refine((data) => Object.keys(data).length > 0, {
-    message: "At least one field is required for update.",
-    path: [],
-  });
+export const updateAssignedTestQuestionSchema = z.object({
+  sectionId: z.union([z.string().min(1), z.null()]).optional(),
+  positiveMarks: marksSchema,
+  negativeMarks: marksSchema,
+});
+
+export const deleteAssignedQuestionsSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("selected"),
+    assignmentIds: z
+      .array(z.string().min(1, "Assignment ID is required."))
+      .min(1, "Select at least one assigned question."),
+  }),
+  z.object({
+    mode: z.literal("all"),
+  }),
+]);
 
 export type AssignTestQuestionsInput = z.infer<typeof assignTestQuestionsSchema>;
 export type UpdateAssignedTestQuestionInput = z.infer<
   typeof updateAssignedTestQuestionSchema
+>;
+export type DeleteAssignedQuestionsInput = z.infer<
+  typeof deleteAssignedQuestionsSchema
 >;
