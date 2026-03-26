@@ -176,6 +176,12 @@ export function TestForm({
     }
   }, [canAllowSectionSwitching, allowSectionSwitching]);
 
+  function clearFeedback() {
+  setErrorMessage(null);
+  setSubmitErrorDetails(null);
+  setSuccessMessage(null);
+}
+
   function resetCreateForm() {
     setTitle("");
     setSlug("");
@@ -193,47 +199,46 @@ export function TestForm({
   }
 
   function handleStructureTypeChange(next: TestStructureType) {
-    setStructureType(next);
-    setErrorMessage(null);
-    setSubmitErrorDetails(null);
-    setSuccessMessage(null);
+  clearFeedback();
+  setStructureType(next);
 
-    if (next === "SINGLE") {
-      setTimerMode("TOTAL");
-      setAllowSectionSwitching(false);
-      setSections([{ title: "", durationInMinutes: "" }]);
-    } else {
-      setSections((prev) =>
-        prev.length > 0 ? prev : [{ title: "", durationInMinutes: "" }]
-      );
-    }
+  if (next === "SINGLE") {
+    setTimerMode("TOTAL");
+    setAllowSectionSwitching(false);
+    setSections([{ title: "", durationInMinutes: "" }]);
+    return;
   }
+
+  setSections((prev) =>
+    prev.length > 0 ? prev : [{ title: "", durationInMinutes: "" }]
+  );
+}
 
   function handleTimerModeChange(next: TimerMode) {
-    setTimerMode(next);
-    setErrorMessage(null);
-    setSubmitErrorDetails(null);
-    setSuccessMessage(null);
+  clearFeedback();
+  setTimerMode(next);
 
-    if (next === "SECTION_WISE") {
-      setAllowSectionSwitching(false);
-      setDurationInMinutes("");
-    }
+  if (next === "SECTION_WISE") {
+    setAllowSectionSwitching(false);
+    setDurationInMinutes("");
   }
+}
 
   function addSection() {
-    setSections((prev) => [...prev, { title: "", durationInMinutes: "" }]);
-  }
+  clearFeedback();
+  setSections((prev) => [...prev, { title: "", durationInMinutes: "" }]);
+}
 
   function removeSection(index: number) {
-    setSections((prev) => {
-      if (prev.length === 1) {
-        return [{ title: "", durationInMinutes: "" }];
-      }
+  clearFeedback();
+  setSections((prev) => {
+    if (prev.length === 1) {
+      return [{ title: "", durationInMinutes: "" }];
+    }
 
-      return prev.filter((_, itemIndex) => itemIndex !== index);
-    });
-  }
+    return prev.filter((_, itemIndex) => itemIndex !== index);
+  });
+}
 
   function updateSection(
     index: number,
@@ -265,30 +270,30 @@ export function TestForm({
         totalQuestions: initialValues?.totalQuestions ?? 0,
         totalMarks: initialValues?.totalMarks ?? 0,
         durationInMinutes: isSectional
-          ? timerMode === "TOTAL"
-            ? durationInMinutes.trim() === ""
-              ? undefined
-              : Number(durationInMinutes)
-            : undefined
-          : durationInMinutes.trim() === ""
-          ? undefined
-          : Number(durationInMinutes),
-        timerMode,
-        allowSectionSwitching: canAllowSectionSwitching
-          ? allowSectionSwitching
-          : false,
-        sections: isSectional
-          ? sections.map((section, index) => ({
-              title: section.title.trim(),
-              displayOrder: index + 1,
-              durationInMinutes:
-                timerMode === "SECTION_WISE"
-                  ? section.durationInMinutes.trim() === ""
-                    ? undefined
-                    : Number(section.durationInMinutes)
-                  : undefined,
-            }))
-          : [],
+  ? timerMode === "TOTAL"
+    ? durationInMinutes.trim() === ""
+      ? undefined
+      : Number(durationInMinutes)
+    : undefined
+  : durationInMinutes.trim() === ""
+  ? undefined
+  : Number(durationInMinutes),
+timerMode,
+allowSectionSwitching: canAllowSectionSwitching
+  ? allowSectionSwitching
+  : false,
+sections: isSectional
+  ? sections.map((section, index) => ({
+      title: section.title.trim(),
+      displayOrder: index + 1,
+      durationInMinutes:
+        timerMode === "SECTION_WISE"
+          ? section.durationInMinutes.trim() === ""
+            ? undefined
+            : Number(section.durationInMinutes)
+          : undefined,
+    }))
+  : [],
         startAt: startAt ? new Date(startAt).toISOString() : undefined,
         endAt: endAt ? new Date(endAt).toISOString() : undefined,
       };
@@ -480,8 +485,8 @@ export function TestForm({
                 <option value="SECTION_WISE">Section-wise Timer</option>
               </select>
               <p className="text-xs text-slate-500">
-                Use overall timer when students may switch sections. Use section-wise timing for strict timed section flow.
-              </p>
+  Use <span className="font-medium">Overall Total Timer</span> when you want one common test timer and optional section switching. Use <span className="font-medium">Section-wise Timer</span> when each section should run with its own strict timing.
+</p>
             </div>
 
             <div className="space-y-2">
@@ -501,8 +506,8 @@ export function TestForm({
                     />
                   </div>
                   <p className="mt-2 text-xs text-slate-500">
-                    This option is not allowed when section-wise timing is enabled. It is automatically reset to off.
-                  </p>
+  Section switching is not allowed when section-wise timing is selected. This option is automatically reset to <span className="font-medium">Off</span>.
+</p>
                 </div>
               ) : (
                 <div className="rounded-2xl border px-4 py-3">
@@ -517,8 +522,8 @@ export function TestForm({
                     <span>Students can switch freely between sections during the test</span>
                   </label>
                   <p className="mt-2 text-xs text-slate-500">
-                    Available only for sectional tests using one overall total timer.
-                  </p>
+  Available only for sectional tests using one overall total timer. Students can move between sections only when this mode is enabled.
+</p>
                 </div>
               )}
             </div>
