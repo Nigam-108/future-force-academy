@@ -193,10 +193,10 @@ export async function getAttemptView(
     selectedAnswer: answer.selectedAnswer,
     markedForReview: answer.markedForReview,
     isAnswered: answer.isAnswered,
-    sectionId: answer.testQuestion.section?.id ?? null,
-    sectionTitle: answer.testQuestion.section?.title ?? null,
-    positiveMarks: answer.testQuestion.positiveMarks,
-    negativeMarks: answer.testQuestion.negativeMarks,
+sectionId: answer.testQuestion.sectionId ?? answer.testQuestion.section?.id ?? null,
+sectionTitle: answer.testQuestion.section?.title ?? null,
+positiveMarks: answer.testQuestion.positiveMarks,
+negativeMarks: answer.testQuestion.negativeMarks,
   }));
 
   return {

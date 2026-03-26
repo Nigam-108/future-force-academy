@@ -138,14 +138,27 @@ function buildSectionState(data: AttemptViewResponse | null) {
     };
   }
 
-  const sections = data.sections.slice().sort((a, b) => a.displayOrder - b.displayOrder);
-  const sectionIndexById = new Map<string, number>();
-  sections.forEach((section, index) => sectionIndexById.set(section.id, index));
+const sections = data.sections.slice().sort((a, b) => a.displayOrder - b.displayOrder);
 
-  const questionSectionIndexes = data.questions.map((question) => {
-    if (!question.sectionId) return -1;
+const sectionIndexById = new Map<string, number>();
+const sectionIndexByTitle = new Map<string, number>();
+
+sections.forEach((section, index) => {
+  sectionIndexById.set(section.id, index);
+  sectionIndexByTitle.set(section.title.trim().toLowerCase(), index);
+});
+
+const questionSectionIndexes = data.questions.map((question) => {
+  if (question.sectionId && sectionIndexById.has(question.sectionId)) {
     return sectionIndexById.get(question.sectionId) ?? -1;
-  });
+  }
+
+  if (question.sectionTitle) {
+    return sectionIndexByTitle.get(question.sectionTitle.trim().toLowerCase()) ?? -1;
+  }
+
+  return -1;
+});
 
   const hasMalformedAssignments =
     sections.length > 0 && questionSectionIndexes.some((index) => index < 0);
@@ -265,13 +278,25 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
   ]);
 
   const currentSectionGroup =
-    effectiveSectionIndex !== null ? sectionGroups[effectiveSectionIndex] ?? null : null;
-  const currentSectionSecondsLeft =
-    isSectionWiseTiming && currentSectionGroup
-      ? Math.max(currentSectionGroup.cumulativeEndSeconds - elapsedSeconds, 0)
-      : null;
+  effectiveSectionIndex !== null ? sectionGroups[effectiveSectionIndex] ?? null : null;
 
-  const answeredCount = useMemo(
+const currentSectionSecondsLeft =
+  isSectionWiseTiming && currentSectionGroup
+    ? Math.max(currentSectionGroup.cumulativeEndSeconds - elapsedSeconds, 0)
+    : null;
+
+const isOverallLowTime = secondsLeft !== null && secondsLeft <= 300;
+const isCurrentSectionLowTime =
+  currentSectionSecondsLeft !== null && currentSectionSecondsLeft <= 300;
+
+const showSectionEndingWarning =
+  isSectionWiseTiming &&
+  currentSectionGroup !== null &&
+  currentSectionSecondsLeft !== null &&
+  currentSectionSecondsLeft > 0 &&
+  currentSectionSecondsLeft <= 60;
+
+const answeredCount = useMemo(
     () => attemptData?.questions.filter((item) => Boolean(item.selectedAnswer)).length ?? 0,
     [attemptData]
   );
@@ -660,16 +685,26 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
           <div className="flex flex-wrap items-center gap-3">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
               <p className="text-xs uppercase tracking-wide text-slate-500">Time Left</p>
-              <p className="mt-1 text-xl font-semibold text-slate-900">{formatTimer(secondsLeft)}</p>
+              <p
+  className={`mt-1 text-xl font-semibold ${
+    isOverallLowTime ? "text-red-600" : "text-slate-900"
+  }`}
+>
+  {formatTimer(secondsLeft)}
+</p>
             </div>
 
             {isSectionWiseTiming && currentSectionGroup ? (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
                 <p className="text-xs uppercase tracking-wide text-slate-500">Current Section</p>
                 <p className="mt-1 text-sm font-semibold text-slate-900">{currentSectionGroup.title}</p>
-                <p className="mt-1 text-lg font-semibold text-slate-900">
-                  {formatTimer(currentSectionSecondsLeft)}
-                </p>
+                <p
+  className={`mt-1 text-lg font-semibold ${
+    isCurrentSectionLowTime ? "text-red-600" : "text-slate-900"
+  }`}
+>
+  {formatTimer(currentSectionSecondsLeft)}
+</p>
               </div>
             ) : null}
 
@@ -696,12 +731,20 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
         </div>
 
         {sectionNotice ? (
-          <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            {sectionNotice}
-          </div>
-        ) : null}
+  <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+    {sectionNotice}
+  </div>
+) : null}
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-3">
+{showSectionEndingWarning ? (
+  <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+    Warning: Section "{currentSectionGroup?.title}" will auto-switch in{" "}
+    <span className="font-semibold">{formatTimer(currentSectionSecondsLeft)}</span>.
+    Save/review your answer now.
+  </div>
+) : null}
+
+<div className="mt-6 grid gap-4 sm:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs uppercase tracking-wide text-slate-500">Answered</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">{answeredCount}</p>
@@ -869,16 +912,21 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
                 const isFuture =
                   !allowFreeSectionSwitching && effectiveSectionIndex !== null && index > effectiveSectionIndex;
                 const sectionTimerLabel = isSectionWiseTiming
-                  ? isCurrent
-                    ? formatTimer(currentSectionSecondsLeft)
-                    : isLocked
-                    ? "Locked"
-                    : section.durationInMinutes
-                    ? `${section.durationInMinutes} min`
-                    : "Not started"
-                  : section.durationInMinutes
-                  ? `${section.durationInMinutes} min`
-                  : "Overall timer";
+  ? isCurrent
+    ? formatTimer(currentSectionSecondsLeft)
+    : isLocked
+      ? "Locked"
+      : section.durationInMinutes
+        ? `${section.durationInMinutes} min • Not Started`
+        : "Not Started"
+  : section.durationInMinutes
+    ? `${section.durationInMinutes} min`
+    : "Overall timer";
+
+const sectionTimerClass =
+  isSectionWiseTiming && isCurrent && isCurrentSectionLowTime
+    ? "text-red-600"
+    : "text-slate-700";
 
                 return (
                   <div
@@ -893,13 +941,24 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="font-medium text-slate-900">{section.title}</p>
-                        <p className="mt-1 text-xs text-slate-600">
-                          {section.startQuestionNumber && section.endQuestionNumber
-                            ? `Q${section.startQuestionNumber}-Q${section.endQuestionNumber}`
-                            : "No assigned questions"}
-                        </p>
-                      </div>
+  {allowFreeSectionSwitching && section.questionIndexes[0] !== undefined ? (
+    <button
+      type="button"
+      onClick={() => goToQuestion(section.questionIndexes[0])}
+      className="font-medium text-slate-900 hover:text-blue-700 hover:underline"
+    >
+      {section.title}
+    </button>
+  ) : (
+    <p className="font-medium text-slate-900">{section.title}</p>
+  )}
+
+  <p className="mt-1 text-xs text-slate-600">
+    {section.startQuestionNumber && section.endQuestionNumber
+      ? `Q${section.startQuestionNumber}-Q${section.endQuestionNumber}`
+      : "No assigned questions"}
+  </p>
+</div>
                       <span
                         className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
                           isCurrent
@@ -914,16 +973,16 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
                         {isCurrent ? "Current" : isLocked ? "Locked" : isFuture ? "Upcoming" : "Open"}
                       </span>
                     </div>
-                    <p className="mt-2 text-sm text-slate-700">{sectionTimerLabel}</p>
+                    <p className={`mt-2 text-sm ${sectionTimerClass}`}>{sectionTimerLabel}</p>
                     {allowFreeSectionSwitching && section.questionIndexes[0] !== undefined ? (
-                      <button
-                        type="button"
-                        onClick={() => goToQuestion(section.questionIndexes[0])}
-                        className="mt-3 rounded-xl border px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-white"
-                      >
-                        Open Section
-                      </button>
-                    ) : null}
+  <button
+    type="button"
+    onClick={() => goToQuestion(section.questionIndexes[0])}
+    className="mt-3 rounded-xl border px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-white"
+  >
+    Go to Section
+  </button>
+) : null}
                   </div>
                 );
               })}
