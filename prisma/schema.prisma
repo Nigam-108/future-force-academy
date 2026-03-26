@@ -138,23 +138,24 @@ model Question {
 }
 
 model Test {
-  id                String               @id @default(cuid())
-  createdById       String?
-  title             String
-  slug              String               @unique
-  description       String?
-  mode              TestMode             @default(PRACTICE)
-  structureType     TestStructureType    @default(SINGLE)
-  visibilityStatus  TestVisibilityStatus @default(DRAFT)
-  totalQuestions    Int                  @default(0)
-  totalMarks        Float                @default(0)
-  durationInMinutes Int?
-  startAt           DateTime?
-  endAt             DateTime?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  id                   String               @id @default(cuid())
+  createdById          String?
+  title                String
+  slug                 String               @unique
+  description          String?
+  mode                 TestMode             @default(PRACTICE)
+  structureType        TestStructureType    @default(SINGLE)
+  visibilityStatus     TestVisibilityStatus @default(DRAFT)
+  totalQuestions       Int                  @default(0)
+  totalMarks           Float                @default(0)
+  durationInMinutes    Int?
+  allowSectionSwitching Boolean             @default(false)
+  startAt              DateTime?
+  endAt                DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
 
-  createdBy     User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy     User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
   sections      TestSection[]
   testQuestions TestQuestion[]
   attempts      TestAttempt[]

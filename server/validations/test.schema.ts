@@ -11,6 +11,16 @@ const sectionSchema = z.object({
   durationInMinutes: z.coerce.number().int().min(1).optional(),
 });
 
+const booleanFromForm = z.preprocess((value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return value;
+}, z.boolean());
+
 const testBaseSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters long."),
   slug: z
@@ -32,15 +42,15 @@ const testBaseSchema = z.object({
   totalMarks: z.coerce.number().min(0).default(0),
   durationInMinutes: z.coerce.number().int().min(1).optional(),
   timerMode: z.enum(["TOTAL", "SECTION_WISE"]).default("TOTAL"),
+  allowSectionSwitching: booleanFromForm.default(false),
   sections: z.array(sectionSchema).default([]),
   startAt: z.string().datetime().optional(),
   endAt: z.string().datetime().optional(),
 });
 
-function validateDateRange(
-  data: z.infer<typeof testBaseSchema>,
-  ctx: z.RefinementCtx
-) {
+type TestSchemaData = z.infer<typeof testBaseSchema>;
+
+function validateDateRange(data: TestSchemaData, ctx: z.RefinementCtx) {
   if (data.startAt && data.endAt) {
     const start = new Date(data.startAt);
     const end = new Date(data.endAt);
@@ -55,11 +65,24 @@ function validateDateRange(
   }
 }
 
-function validateStructureRules(
-  data: z.infer<typeof testBaseSchema>,
-  ctx: z.RefinementCtx
-) {
+function validateStructureRules(data: TestSchemaData, ctx: z.RefinementCtx) {
   if (data.structureType === TestStructureType.SINGLE) {
+    if (data.sections.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sections"],
+        message: "Single tests cannot have sections.",
+      });
+    }
+
+    if (data.allowSectionSwitching) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["allowSectionSwitching"],
+        message: "Section switching can only be used for sectional tests.",
+      });
+    }
+
     return;
   }
 
@@ -95,15 +118,6 @@ function validateStructureRules(
   }
 
   if (data.timerMode === "SECTION_WISE") {
-    if (data.durationInMinutes) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["durationInMinutes"],
-        message:
-          "Do not set overall duration when using section-wise timer.",
-      });
-    }
-
     data.sections.forEach((section, index) => {
       if (!section.durationInMinutes || section.durationInMinutes < 1) {
         ctx.addIssue({
@@ -114,6 +128,15 @@ function validateStructureRules(
         });
       }
     });
+
+    if (data.allowSectionSwitching) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["allowSectionSwitching"],
+        message:
+          "Section switching is not allowed when section-wise timing is enabled.",
+      });
+    }
   }
 }
 

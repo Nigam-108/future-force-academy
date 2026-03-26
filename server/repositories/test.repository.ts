@@ -107,6 +107,7 @@ export async function createTestRecord(data: {
   totalQuestions: number;
   totalMarks: number;
   durationInMinutes?: number;
+  allowSectionSwitching?: boolean;
   startAt?: Date;
   endAt?: Date;
   sections?: SectionInput[];
@@ -124,6 +125,7 @@ export async function createTestRecord(data: {
         totalQuestions: data.totalQuestions,
         totalMarks: data.totalMarks,
         durationInMinutes: data.durationInMinutes,
+        allowSectionSwitching: data.allowSectionSwitching ?? false,
         startAt: data.startAt,
         endAt: data.endAt,
       },
@@ -159,6 +161,7 @@ export async function updateTestRecord(
     totalQuestions: number;
     totalMarks: number;
     durationInMinutes?: number;
+    allowSectionSwitching?: boolean; 
     startAt?: Date;
     endAt?: Date;
     sections?: SectionInput[];
@@ -177,6 +180,7 @@ export async function updateTestRecord(
         totalQuestions: data.totalQuestions,
         totalMarks: data.totalMarks,
         durationInMinutes: data.durationInMinutes,
+        allowSectionSwitching: data.allowSectionSwitching ?? false,
         startAt: data.startAt,
         endAt: data.endAt,
       },
@@ -443,6 +447,7 @@ type TestBlueprint = {
   totalQuestions: number;
   totalMarks: number;
   durationInMinutes: number | null;
+  allowSectionSwitching: boolean;
   startAt: Date | null;
   endAt: Date | null;
   sections: Array<{
@@ -480,6 +485,7 @@ export async function findTestBlueprintForDuplication(
       totalQuestions: true,
       totalMarks: true,
       durationInMinutes: true,
+      allowSectionSwitching: true,
       startAt: true,
       endAt: true,
       sections: {
@@ -530,6 +536,7 @@ export async function duplicateTestRecord(params: {
         totalQuestions: source.totalQuestions,
         totalMarks: source.totalMarks,
         durationInMinutes: source.durationInMinutes ?? undefined,
+        allowSectionSwitching: source.allowSectionSwitching ?? false,
         startAt: source.startAt ?? undefined,
         endAt: source.endAt ?? undefined,
       },

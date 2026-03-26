@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+
 import { requireAdmin } from "@/server/auth/guards";
 import { fail, ok } from "@/server/utils/api-response";
 import { AppError } from "@/server/utils/errors";
@@ -22,6 +23,14 @@ function getStatusCode(error: unknown) {
   return 400;
 }
 
+function getErrorDetails(error: unknown) {
+  if (error instanceof AppError) {
+    return error.details ?? null;
+  }
+
+  return null;
+}
+
 type RouteContext = {
   params: Promise<{ testId: string }>;
 };
@@ -29,7 +38,6 @@ type RouteContext = {
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
     await requireAdmin("test.manage");
-
     const { testId } = await context.params;
     const test = await getTestById(testId);
 
@@ -38,14 +46,13 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     const message =
       error instanceof Error ? error.message : "Failed to fetch test";
 
-    return fail(message, getStatusCode(error));
+    return fail(message, getStatusCode(error), getErrorDetails(error));
   }
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     await requireAdmin("test.manage");
-
     const { testId } = await context.params;
     const body = await request.json();
     const parsed = updateTestSchema.safeParse(body);
@@ -61,22 +68,21 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const message =
       error instanceof Error ? error.message : "Failed to update test";
 
-    return fail(message, getStatusCode(error));
+    return fail(message, getStatusCode(error), getErrorDetails(error));
   }
 }
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
     await requireAdmin("test.manage");
-
     const { testId } = await context.params;
-    const result = await deleteTest(testId);
+    const deleted = await deleteTest(testId);
 
-    return ok("Test deleted successfully", result, 200);
+    return ok("Test deleted successfully", deleted, 200);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to delete test";
 
-    return fail(message, getStatusCode(error));
+    return fail(message, getStatusCode(error), getErrorDetails(error));
   }
 }
