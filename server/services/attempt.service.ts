@@ -193,6 +193,7 @@ export async function getAttemptView(
     selectedAnswer: answer.selectedAnswer,
     markedForReview: answer.markedForReview,
     isAnswered: answer.isAnswered,
+    sectionId: answer.testQuestion.section?.id ?? null,
     sectionTitle: answer.testQuestion.section?.title ?? null,
     positiveMarks: answer.testQuestion.positiveMarks,
     negativeMarks: answer.testQuestion.negativeMarks,
@@ -212,6 +213,7 @@ export async function getAttemptView(
       totalQuestions: attempt.test._count.testQuestions,
       totalMarks: attempt.test.totalMarks,
       durationInMinutes: attempt.test.durationInMinutes,
+      allowSectionSwitching: attempt.test.allowSectionSwitching,
     },
     sections: attempt.test.sections.map((section) => ({
       id: section.id,
