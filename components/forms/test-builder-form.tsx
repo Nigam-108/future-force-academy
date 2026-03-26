@@ -8,11 +8,18 @@ type TestStructureType = "SINGLE" | "SECTIONAL";
 type TestVisibilityStatus = "DRAFT" | "LIVE" | "CLOSED";
 type TimerMode = "TOTAL" | "SECTION_WISE";
 
+type StructuralEditBlockDetails = {
+  code?: string;
+  redirectTo?: string;
+  actionLabel?: string;
+};
+
 type ApiResponse<T> = {
   success: boolean;
   message: string;
   data: T | null;
   errors?: unknown;
+  details?: StructuralEditBlockDetails | null;
 };
 
 type TestSectionFormValue = {
@@ -130,8 +137,10 @@ export function TestForm({
   const [endAt, setEndAt] = useState(toDateTimeLocal(initialValues?.endAt));
   const [slugTouched, setSlugTouched] = useState(Boolean(initialValues?.slug));
   const [submitting, setSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+const [errorMessage, setErrorMessage] = useState<string | null>(null);
+const [submitErrorDetails, setSubmitErrorDetails] =
+  useState<StructuralEditBlockDetails | null>(null);
+const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const computedSlug = useMemo(() => {
     if (slugTouched) return slug;
@@ -200,12 +209,13 @@ export function TestForm({
   }
 
   async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    setSubmitting(true);
-    setErrorMessage(null);
-    setSuccessMessage(null);
+  event.preventDefault();
+  setSubmitting(true);
+  setErrorMessage(null);
+  setSubmitErrorDetails(null);
+  setSuccessMessage(null);
 
-    try {
+  try {
       const payload = {
         title: title.trim(),
         slug: computedSlug.trim(),
@@ -264,12 +274,18 @@ export function TestForm({
       });
 
       const json = (await response.json().catch(() => null)) as
-        | ApiResponse<{ id: string }>
-        | null;
+  | ApiResponse<{ id: string }>
+  | null;
 
-      if (!response.ok || !json?.success) {
-        throw new Error(json?.message || "Failed to save test.");
-      }
+if (!response.ok || !json?.success) {
+  const message = json?.message || "Failed to save test.";
+  const details = json?.details ?? null;
+
+  setErrorMessage(message);
+  setSubmitErrorDetails(details);
+
+  return;
+}
 
       if (mode === "create") {
         setSuccessMessage("Test created successfully. You can now assign questions to it.");
@@ -281,10 +297,11 @@ export function TestForm({
       router.push("/admin/tests");
       router.refresh();
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to save test."
-      );
-    } finally {
+  setErrorMessage(
+    error instanceof Error ? error.message : "Failed to save test."
+  );
+  setSubmitErrorDetails(null);
+} finally {
       setSubmitting(false);
     }
   }
@@ -292,10 +309,23 @@ export function TestForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6 rounded-3xl border bg-white p-6 shadow-sm">
       {errorMessage ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {errorMessage}
-        </div>
-      ) : null}
+  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+    <p>{errorMessage}</p>
+
+    {submitErrorDetails?.code === "TEST_STRUCTURAL_EDIT_BLOCKED" &&
+    submitErrorDetails?.redirectTo ? (
+      <div className="mt-3">
+        <button
+          type="button"
+          onClick={() => router.push(submitErrorDetails.redirectTo!)}
+          className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+        >
+          {submitErrorDetails.actionLabel ?? "Go to Assigned Questions"}
+        </button>
+      </div>
+    ) : null}
+  </div>
+) : null}
 
       {successMessage ? (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
