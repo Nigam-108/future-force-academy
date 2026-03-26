@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type TestMode = "PRACTICE" | "LIVE" | "ASSIGNED";
@@ -101,11 +101,13 @@ export function TestForm({
   initialValues,
 }: TestFormProps) {
   const router = useRouter();
+  const feedbackRef = useRef<HTMLDivElement | null>(null);
 
   const hasSectionDurations =
     initialValues?.structureType === "SECTIONAL" &&
     (initialValues.sections?.some(
-      (section) => section.durationInMinutes != null && section.durationInMinutes > 0
+      (section) =>
+        section.durationInMinutes != null && section.durationInMinutes > 0
     ) ??
       false);
 
@@ -136,16 +138,43 @@ export function TestForm({
   const [startAt, setStartAt] = useState(toDateTimeLocal(initialValues?.startAt));
   const [endAt, setEndAt] = useState(toDateTimeLocal(initialValues?.endAt));
   const [slugTouched, setSlugTouched] = useState(Boolean(initialValues?.slug));
+
   const [submitting, setSubmitting] = useState(false);
-const [errorMessage, setErrorMessage] = useState<string | null>(null);
-const [submitErrorDetails, setSubmitErrorDetails] =
-  useState<StructuralEditBlockDetails | null>(null);
-const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [submitErrorDetails, setSubmitErrorDetails] =
+    useState<StructuralEditBlockDetails | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const computedSlug = useMemo(() => {
     if (slugTouched) return slug;
     return makeSlug(title);
   }, [title, slug, slugTouched]);
+
+  const isSectional = structureType === "SECTIONAL";
+  const isSectionWiseTiming = isSectional && timerMode === "SECTION_WISE";
+  const canAllowSectionSwitching = isSectional && timerMode === "TOTAL";
+
+  useEffect(() => {
+  if (!(errorMessage || successMessage) || !feedbackRef.current) {
+    return;
+  }
+
+  const headerOffset = 110; // adjust if sticky header height changes
+  const elementTop =
+    feedbackRef.current.getBoundingClientRect().top + window.scrollY;
+  const targetTop = Math.max(elementTop - headerOffset, 0);
+
+  window.scrollTo({
+    top: targetTop,
+    behavior: "smooth",
+  });
+}, [errorMessage, successMessage]);
+
+  useEffect(() => {
+    if (!canAllowSectionSwitching && allowSectionSwitching) {
+      setAllowSectionSwitching(false);
+    }
+  }, [canAllowSectionSwitching, allowSectionSwitching]);
 
   function resetCreateForm() {
     setTitle("");
@@ -165,16 +194,26 @@ const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   function handleStructureTypeChange(next: TestStructureType) {
     setStructureType(next);
+    setErrorMessage(null);
+    setSubmitErrorDetails(null);
+    setSuccessMessage(null);
 
     if (next === "SINGLE") {
       setTimerMode("TOTAL");
       setAllowSectionSwitching(false);
       setSections([{ title: "", durationInMinutes: "" }]);
+    } else {
+      setSections((prev) =>
+        prev.length > 0 ? prev : [{ title: "", durationInMinutes: "" }]
+      );
     }
   }
 
   function handleTimerModeChange(next: TimerMode) {
     setTimerMode(next);
+    setErrorMessage(null);
+    setSubmitErrorDetails(null);
+    setSuccessMessage(null);
 
     if (next === "SECTION_WISE") {
       setAllowSectionSwitching(false);
@@ -209,13 +248,13 @@ const [successMessage, setSuccessMessage] = useState<string | null>(null);
   }
 
   async function handleSubmit(event: React.FormEvent) {
-  event.preventDefault();
-  setSubmitting(true);
-  setErrorMessage(null);
-  setSubmitErrorDetails(null);
-  setSuccessMessage(null);
+    event.preventDefault();
+    setSubmitting(true);
+    setErrorMessage(null);
+    setSubmitErrorDetails(null);
+    setSuccessMessage(null);
 
-  try {
+    try {
       const payload = {
         title: title.trim(),
         slug: computedSlug.trim(),
@@ -225,34 +264,31 @@ const [successMessage, setSuccessMessage] = useState<string | null>(null);
         visibilityStatus,
         totalQuestions: initialValues?.totalQuestions ?? 0,
         totalMarks: initialValues?.totalMarks ?? 0,
-        durationInMinutes:
-          structureType === "SECTIONAL"
-            ? timerMode === "TOTAL"
-              ? durationInMinutes.trim() === ""
-                ? undefined
-                : Number(durationInMinutes)
-              : undefined
-            : durationInMinutes.trim() === ""
-            ? undefined
-            : Number(durationInMinutes),
+        durationInMinutes: isSectional
+          ? timerMode === "TOTAL"
+            ? durationInMinutes.trim() === ""
+              ? undefined
+              : Number(durationInMinutes)
+            : undefined
+          : durationInMinutes.trim() === ""
+          ? undefined
+          : Number(durationInMinutes),
         timerMode,
-        allowSectionSwitching:
-          structureType === "SECTIONAL" && timerMode === "TOTAL"
-            ? allowSectionSwitching
-            : false,
-        sections:
-          structureType === "SECTIONAL"
-            ? sections.map((section, index) => ({
-                title: section.title.trim(),
-                displayOrder: index + 1,
-                durationInMinutes:
-                  timerMode === "SECTION_WISE"
-                    ? section.durationInMinutes.trim() === ""
-                      ? undefined
-                      : Number(section.durationInMinutes)
-                    : undefined,
-              }))
-            : [],
+        allowSectionSwitching: canAllowSectionSwitching
+          ? allowSectionSwitching
+          : false,
+        sections: isSectional
+          ? sections.map((section, index) => ({
+              title: section.title.trim(),
+              displayOrder: index + 1,
+              durationInMinutes:
+                timerMode === "SECTION_WISE"
+                  ? section.durationInMinutes.trim() === ""
+                    ? undefined
+                    : Number(section.durationInMinutes)
+                  : undefined,
+            }))
+          : [],
         startAt: startAt ? new Date(startAt).toISOString() : undefined,
         endAt: endAt ? new Date(endAt).toISOString() : undefined,
       };
@@ -274,18 +310,21 @@ const [successMessage, setSuccessMessage] = useState<string | null>(null);
       });
 
       const json = (await response.json().catch(() => null)) as
-  | ApiResponse<{ id: string }>
-  | null;
+        | ApiResponse<{ id: string }>
+        | null;
 
-if (!response.ok || !json?.success) {
-  const message = json?.message || "Failed to save test.";
-  const details = json?.details ?? null;
+      if (!response.ok || !json?.success) {
+        const message = json?.message || "Failed to save test.";
+        const details =
+          json?.details ??
+          (json?.errors && typeof json.errors === "object"
+            ? (json.errors as StructuralEditBlockDetails)
+            : null);
 
-  setErrorMessage(message);
-  setSubmitErrorDetails(details);
-
-  return;
-}
+        setErrorMessage(message);
+        setSubmitErrorDetails(details);
+        return;
+      }
 
       if (mode === "create") {
         setSuccessMessage("Test created successfully. You can now assign questions to it.");
@@ -294,38 +333,43 @@ if (!response.ok || !json?.success) {
         return;
       }
 
-      router.push("/admin/tests");
+      setSuccessMessage("Test updated successfully.");
       router.refresh();
     } catch (error) {
-  setErrorMessage(
-    error instanceof Error ? error.message : "Failed to save test."
-  );
-  setSubmitErrorDetails(null);
-} finally {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to save test."
+      );
+      setSubmitErrorDetails(null);
+    } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 rounded-3xl border bg-white p-6 shadow-sm">
-      {errorMessage ? (
-  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-    <p>{errorMessage}</p>
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-6 rounded-3xl border bg-white p-6 shadow-sm"
+    >
+      <div ref={feedbackRef} />
 
-    {submitErrorDetails?.code === "TEST_STRUCTURAL_EDIT_BLOCKED" &&
-    submitErrorDetails?.redirectTo ? (
-      <div className="mt-3">
-        <button
-          type="button"
-          onClick={() => router.push(submitErrorDetails.redirectTo!)}
-          className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
-        >
-          {submitErrorDetails.actionLabel ?? "Go to Assigned Questions"}
-        </button>
-      </div>
-    ) : null}
-  </div>
-) : null}
+      {errorMessage ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <p>{errorMessage}</p>
+
+            {submitErrorDetails?.code === "TEST_STRUCTURAL_EDIT_BLOCKED" &&
+            submitErrorDetails?.redirectTo ? (
+              <button
+                type="button"
+                onClick={() => router.push(submitErrorDetails.redirectTo!)}
+                className="inline-flex rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+              >
+                {submitErrorDetails.actionLabel ?? "Go to Assigned Questions"}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {successMessage ? (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
@@ -421,7 +465,7 @@ if (!response.ok || !json?.success) {
           </select>
         </div>
 
-        {structureType === "SECTIONAL" ? (
+        {isSectional ? (
           <>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-800">Timer Mode</label>
@@ -435,6 +479,9 @@ if (!response.ok || !json?.success) {
                 <option value="TOTAL">Overall Total Timer</option>
                 <option value="SECTION_WISE">Section-wise Timer</option>
               </select>
+              <p className="text-xs text-slate-500">
+                Use overall timer when students may switch sections. Use section-wise timing for strict timed section flow.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -442,7 +489,7 @@ if (!response.ok || !json?.success) {
                 Allow Section Switching
               </label>
 
-              {timerMode === "SECTION_WISE" ? (
+              {isSectionWiseTiming ? (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
                   <div className="flex items-center justify-between gap-3">
                     <span>Students can switch freely between sections</span>
@@ -454,18 +501,25 @@ if (!response.ok || !json?.success) {
                     />
                   </div>
                   <p className="mt-2 text-xs text-slate-500">
-                    This option is not allowed when section-wise timing is enabled.
+                    This option is not allowed when section-wise timing is enabled. It is automatically reset to off.
                   </p>
                 </div>
               ) : (
-                <label className="flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={allowSectionSwitching}
-                    onChange={(event) => setAllowSectionSwitching(event.target.checked)}
-                  />
-                  <span>Students can switch freely between sections during the test</span>
-                </label>
+                <div className="rounded-2xl border px-4 py-3">
+                  <label className="flex items-center gap-3 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={allowSectionSwitching}
+                      onChange={(event) =>
+                        setAllowSectionSwitching(event.target.checked)
+                      }
+                    />
+                    <span>Students can switch freely between sections during the test</span>
+                  </label>
+                  <p className="mt-2 text-xs text-slate-500">
+                    Available only for sectional tests using one overall total timer.
+                  </p>
+                </div>
               )}
             </div>
 
@@ -531,7 +585,7 @@ if (!response.ok || !json?.success) {
                         />
                       </div>
 
-                      {timerMode === "SECTION_WISE" ? (
+                      {isSectionWiseTiming ? (
                         <div className="space-y-2">
                           <label className="text-sm font-medium text-slate-700">
                             Section Duration (Minutes)
