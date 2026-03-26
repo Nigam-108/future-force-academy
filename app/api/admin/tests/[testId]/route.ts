@@ -3,11 +3,7 @@ import { NextRequest } from "next/server";
 import { requireAdmin } from "@/server/auth/guards";
 import { fail, ok } from "@/server/utils/api-response";
 import { AppError } from "@/server/utils/errors";
-import {
-  deleteTest,
-  getTestById,
-  updateTest,
-} from "@/server/services/test.service";
+import { getTestById, updateTest } from "@/server/services/test.service";
 import { updateTestSchema } from "@/server/validations/test.schema";
 
 function getStatusCode(error: unknown) {
@@ -67,21 +63,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to update test";
-
-    return fail(message, getStatusCode(error), getErrorDetails(error));
-  }
-}
-
-export async function DELETE(_request: NextRequest, context: RouteContext) {
-  try {
-    await requireAdmin("test.manage");
-    const { testId } = await context.params;
-    const deleted = await deleteTest(testId);
-
-    return ok("Test deleted successfully", deleted, 200);
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to delete test";
 
     return fail(message, getStatusCode(error), getErrorDetails(error));
   }
