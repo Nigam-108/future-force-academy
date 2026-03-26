@@ -17,6 +17,7 @@ export function fail(message: string, status = 400, errors?: unknown) {
       success: false,
       message,
       errors: errors ?? null,
+      details: errors ?? null,
     },
     { status }
   );
