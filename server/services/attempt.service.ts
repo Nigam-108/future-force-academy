@@ -1,7 +1,5 @@
 import { AttemptStatus, TestMode, TestVisibilityStatus } from "@prisma/client";
-import {
-  studentHasTestAccess,
-} from "@/server/services/access.service";
+import { studentHasTestAccess } from "@/server/services/access.service";
 import { AppError } from "@/server/utils/errors";
 import {
   checkStudentBatchAccessToTest,
@@ -97,24 +95,24 @@ export async function startAttempt(input: StartAttemptInput, userId: string) {
 
     if (!hasAccess) {
       const allBatchesClosed = test.testBatches.every(
-        (tb) => tb.batch.status !== "ACTIVE"
+        (tb) => tb.batch.status !== "ACTIVE",
       );
 
       if (allBatchesClosed) {
         throw new AppError(
           "This test is currently unavailable — all linked batches are closed.",
-          403
+          403,
         );
       }
 
       throw new AppError(
         "You do not have access to this test. Please purchase or contact your admin.",
-        403
+        403,
       );
     }
   }
   // ── End batch access guard ──────────────────────────────────────────────────
-  
+
   if (test.testQuestions.length === 0) {
     throw new AppError("This test has no assigned questions yet", 400);
   }
@@ -168,7 +166,7 @@ export async function startAttempt(input: StartAttemptInput, userId: string) {
  */
 export async function getAttemptView(
   input: GetAttemptViewQueryInput,
-  userId: string
+  userId: string,
 ) {
   const attempt = await findAttemptViewByIdForUser(input.attemptId, userId);
 
@@ -193,10 +191,11 @@ export async function getAttemptView(
     selectedAnswer: answer.selectedAnswer,
     markedForReview: answer.markedForReview,
     isAnswered: answer.isAnswered,
-sectionId: answer.testQuestion.sectionId ?? answer.testQuestion.section?.id ?? null,
-sectionTitle: answer.testQuestion.section?.title ?? null,
-positiveMarks: answer.testQuestion.positiveMarks,
-negativeMarks: answer.testQuestion.negativeMarks,
+    sectionId:
+      answer.testQuestion.sectionId ?? answer.testQuestion.section?.id ?? null,
+    sectionTitle: answer.testQuestion.section?.title ?? null,
+    positiveMarks: answer.testQuestion.positiveMarks,
+    negativeMarks: answer.testQuestion.negativeMarks,
   }));
 
   return {
@@ -245,7 +244,7 @@ export async function saveAnswer(input: SaveAnswerInput, userId: string) {
 
   const testQuestion = await findTestQuestionByIdAndTest(
     input.testQuestionId,
-    attempt.testId
+    attempt.testId,
   );
 
   if (!testQuestion) {
@@ -342,9 +341,12 @@ export async function submitAttempt(input: SubmitAttemptInput, userId: string) {
 
 export async function getAttemptResult(
   input: GetAttemptResultQueryInput,
-  userId: string
+  userId: string,
 ) {
-  const attempt = await findSubmittedAttemptResultForUser(input.attemptId, userId);
+  const attempt = await findSubmittedAttemptResultForUser(
+    input.attemptId,
+    userId,
+  );
 
   if (!attempt) {
     throw new AppError("Submitted result not found", 404);
