@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { QuestionPalette } from "@/components/student/question-palette";
 import { TestTimerBar } from "@/components/student/test-timer-bar";
+import { SectionNotices } from "@/components/student/section-notices";
+import { SectionPanel } from "@/components/student/section-panel";
 
 type AttemptPageClientProps = { testId: string };
 
@@ -822,21 +824,13 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
           />
         </div>
 
-        {sectionNotice ? (
-          <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            {sectionNotice}
-          </div>
-        ) : null}
-
-        {showSectionEndingWarning ? (
-          <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            Warning: Section "{currentSectionGroup?.title}" will auto-switch in{" "}
-            <span className="font-semibold">
-              {formatTimer(currentSectionSecondsLeft)}
-            </span>
-            . Save/review your answer now.
-          </div>
-        ) : null}
+        <SectionNotices
+  sectionNotice={sectionNotice}
+  showSectionEndingWarning={showSectionEndingWarning}
+  currentSectionTitle={currentSectionGroup?.title ?? null}
+  currentSectionSecondsLeft={currentSectionSecondsLeft}
+  formatTimer={formatTimer}
+/>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -1009,113 +1003,16 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
           }}
         />
 
-        {sectionGroups.length > 0 ? (
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-slate-900">Sections</h3>
-            <div className="mt-4 space-y-3">
-              {sectionGroups.map((section, index) => {
-                const isCurrent = effectiveSectionIndex === index;
-                const isLocked =
-                  !allowFreeSectionSwitching &&
-                  effectiveSectionIndex !== null &&
-                  index < effectiveSectionIndex;
-                const isFuture =
-                  !allowFreeSectionSwitching &&
-                  effectiveSectionIndex !== null &&
-                  index > effectiveSectionIndex;
-                const sectionTimerLabel = isSectionWiseTiming
-                  ? isCurrent
-                    ? formatTimer(currentSectionSecondsLeft)
-                    : isLocked
-                      ? "Locked"
-                      : section.durationInMinutes
-                        ? `${section.durationInMinutes} min • Not Started`
-                        : "Not Started"
-                  : section.durationInMinutes
-                    ? `${section.durationInMinutes} min`
-                    : "Overall timer";
-
-                const sectionTimerClass =
-                  isSectionWiseTiming && isCurrent && isCurrentSectionLowTime
-                    ? "text-red-600"
-                    : "text-slate-700";
-
-                return (
-                  <div
-                    key={section.id}
-                    className={`rounded-2xl border p-4 ${
-                      isCurrent
-                        ? "border-blue-200 bg-blue-50"
-                        : isLocked
-                          ? "border-slate-200 bg-slate-100 text-slate-500"
-                          : "border-slate-200 bg-slate-50"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        {allowFreeSectionSwitching &&
-                        section.questionIndexes[0] !== undefined ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              goToQuestion(section.questionIndexes[0])
-                            }
-                            className="font-medium text-slate-900 hover:text-blue-700 hover:underline"
-                          >
-                            {section.title}
-                          </button>
-                        ) : (
-                          <p className="font-medium text-slate-900">
-                            {section.title}
-                          </p>
-                        )}
-
-                        <p className="mt-1 text-xs text-slate-600">
-                          {section.startQuestionNumber &&
-                          section.endQuestionNumber
-                            ? `Q${section.startQuestionNumber}-Q${section.endQuestionNumber}`
-                            : "No assigned questions"}
-                        </p>
-                      </div>
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                          isCurrent
-                            ? "bg-blue-100 text-blue-700"
-                            : isLocked
-                              ? "bg-slate-200 text-slate-500"
-                              : isFuture
-                                ? "bg-amber-100 text-amber-700"
-                                : "bg-emerald-100 text-emerald-700"
-                        }`}
-                      >
-                        {isCurrent
-                          ? "Current"
-                          : isLocked
-                            ? "Locked"
-                            : isFuture
-                              ? "Upcoming"
-                              : "Open"}
-                      </span>
-                    </div>
-                    <p className={`mt-2 text-sm ${sectionTimerClass}`}>
-                      {sectionTimerLabel}
-                    </p>
-                    {allowFreeSectionSwitching &&
-                    section.questionIndexes[0] !== undefined ? (
-                      <button
-                        type="button"
-                        onClick={() => goToQuestion(section.questionIndexes[0])}
-                        className="mt-3 rounded-xl border px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-white"
-                      >
-                        Go to Section
-                      </button>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
+        <SectionPanel
+  sections={sectionGroups}
+  effectiveSectionIndex={effectiveSectionIndex}
+  allowFreeSectionSwitching={allowFreeSectionSwitching}
+  isSectionWiseTiming={isSectionWiseTiming}
+  currentSectionSecondsLeft={currentSectionSecondsLeft}
+  isCurrentSectionLowTime={isCurrentSectionLowTime}
+  onOpenSection={goToQuestion}
+  formatTimer={formatTimer}
+/>
       </aside>
     </div>
   );
