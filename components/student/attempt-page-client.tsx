@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { QuestionPalette } from "@/components/student/question-palette";
+import { TestTimerBar } from "@/components/student/test-timer-bar";
 
 type AttemptPageClientProps = { testId: string };
 
@@ -14,7 +16,12 @@ type ApiResponse<T> = {
 
 type StartAttemptResponse = {
   resumed: boolean;
-  attempt: { id: string; testId: string; status: string; startedAt: string | null };
+  attempt: {
+    id: string;
+    testId: string;
+    status: string;
+    startedAt: string | null;
+  };
 };
 
 type AttemptViewResponse = {
@@ -83,21 +90,19 @@ type SectionGroup = {
   cumulativeEndSeconds: number;
 };
 
-function paletteClass(state: "current" | "attempted" | "review" | "default") {
-  if (state === "current") return "bg-blue-600 text-white border-blue-600";
-  if (state === "attempted") return "bg-emerald-100 text-emerald-700 border-emerald-200";
-  if (state === "review") return "bg-amber-100 text-amber-700 border-amber-200";
-  return "bg-white text-slate-700 border-slate-200";
-}
-
-async function apiPost<T>(path: string, body: unknown): Promise<ApiResponse<T>> {
+async function apiPost<T>(
+  path: string,
+  body: unknown,
+): Promise<ApiResponse<T>> {
   const response = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
     cache: "no-store",
   });
-  const json = (await response.json().catch(() => null)) as ApiResponse<T> | null;
+  const json = (await response
+    .json()
+    .catch(() => null)) as ApiResponse<T> | null;
   return {
     success: Boolean(json?.success),
     message: json?.message ?? "Request failed.",
@@ -112,7 +117,9 @@ async function apiGet<T>(path: string): Promise<ApiResponse<T>> {
     headers: { Accept: "application/json" },
     cache: "no-store",
   });
-  const json = (await response.json().catch(() => null)) as ApiResponse<T> | null;
+  const json = (await response
+    .json()
+    .catch(() => null)) as ApiResponse<T> | null;
   return {
     success: Boolean(json?.success),
     message: json?.message ?? "Request failed.",
@@ -126,7 +133,9 @@ function formatTimer(totalSeconds: number | null) {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  return [hours, minutes, seconds].map((v) => String(v).padStart(2, "0")).join(":");
+  return [hours, minutes, seconds]
+    .map((v) => String(v).padStart(2, "0"))
+    .join(":");
 }
 
 function buildSectionState(data: AttemptViewResponse | null) {
@@ -138,27 +147,32 @@ function buildSectionState(data: AttemptViewResponse | null) {
     };
   }
 
-const sections = data.sections.slice().sort((a, b) => a.displayOrder - b.displayOrder);
+  const sections = data.sections
+    .slice()
+    .sort((a, b) => a.displayOrder - b.displayOrder);
 
-const sectionIndexById = new Map<string, number>();
-const sectionIndexByTitle = new Map<string, number>();
+  const sectionIndexById = new Map<string, number>();
+  const sectionIndexByTitle = new Map<string, number>();
 
-sections.forEach((section, index) => {
-  sectionIndexById.set(section.id, index);
-  sectionIndexByTitle.set(section.title.trim().toLowerCase(), index);
-});
+  sections.forEach((section, index) => {
+    sectionIndexById.set(section.id, index);
+    sectionIndexByTitle.set(section.title.trim().toLowerCase(), index);
+  });
 
-const questionSectionIndexes = data.questions.map((question) => {
-  if (question.sectionId && sectionIndexById.has(question.sectionId)) {
-    return sectionIndexById.get(question.sectionId) ?? -1;
-  }
+  const questionSectionIndexes = data.questions.map((question) => {
+    if (question.sectionId && sectionIndexById.has(question.sectionId)) {
+      return sectionIndexById.get(question.sectionId) ?? -1;
+    }
 
-  if (question.sectionTitle) {
-    return sectionIndexByTitle.get(question.sectionTitle.trim().toLowerCase()) ?? -1;
-  }
+    if (question.sectionTitle) {
+      return (
+        sectionIndexByTitle.get(question.sectionTitle.trim().toLowerCase()) ??
+        -1
+      );
+    }
 
-  return -1;
-});
+    return -1;
+  });
 
   const hasMalformedAssignments =
     sections.length > 0 && questionSectionIndexes.some((index) => index < 0);
@@ -166,16 +180,19 @@ const questionSectionIndexes = data.questions.map((question) => {
   let runningSeconds = 0;
   const groups = sections.map((section, sectionIndex) => {
     const questionIndexes = questionSectionIndexes
-      .map((index, questionIndex) => (index === sectionIndex ? questionIndex : -1))
+      .map((index, questionIndex) =>
+        index === sectionIndex ? questionIndex : -1,
+      )
       .filter((index) => index >= 0);
 
     const startQuestionNumber =
       questionIndexes.length > 0
-        ? data.questions[questionIndexes[0]]?.questionNumber ?? null
+        ? (data.questions[questionIndexes[0]]?.questionNumber ?? null)
         : null;
     const endQuestionNumber =
       questionIndexes.length > 0
-        ? data.questions[questionIndexes[questionIndexes.length - 1]]?.questionNumber ?? null
+        ? (data.questions[questionIndexes[questionIndexes.length - 1]]
+            ?.questionNumber ?? null)
         : null;
 
     const cumulativeStartSeconds = runningSeconds;
@@ -209,12 +226,16 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
 
   const [loading, setLoading] = useState(true);
   const [bootError, setBootError] = useState<string | null>(null);
-  const [attemptData, setAttemptData] = useState<AttemptViewResponse | null>(null);
+  const [attemptData, setAttemptData] = useState<AttemptViewResponse | null>(
+    null,
+  );
   const [currentIndex, setCurrentIndex] = useState(0);
   const [busyQuestionId, setBusyQuestionId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveStatus, setSaveStatus] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
   const [manualSectionIndex, setManualSectionIndex] = useState(0);
   const [sectionNotice, setSectionNotice] = useState<string | null>(null);
 
@@ -223,10 +244,11 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
   const sectionNoticeTimeoutRef = useRef<number | null>(null);
 
   const currentQuestion = attemptData?.questions[currentIndex] ?? null;
-  const { groups: sectionGroups, questionSectionIndexes, hasMalformedAssignments } = useMemo(
-    () => buildSectionState(attemptData),
-    [attemptData]
-  );
+  const {
+    groups: sectionGroups,
+    questionSectionIndexes,
+    hasMalformedAssignments,
+  } = useMemo(() => buildSectionState(attemptData), [attemptData]);
 
   const isSectionalTest =
     Boolean(attemptData) &&
@@ -234,25 +256,35 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
     sectionGroups.length > 0 &&
     !hasMalformedAssignments;
   const isSectionWiseTiming =
-    isSectionalTest && sectionGroups.some((group) => typeof group.durationInMinutes === "number");
+    isSectionalTest &&
+    sectionGroups.some((group) => typeof group.durationInMinutes === "number");
   const allowFreeSectionSwitching =
     isSectionalTest &&
     !isSectionWiseTiming &&
     Boolean(attemptData?.attempt.allowSectionSwitching);
 
-  const totalDurationSeconds = Math.max((attemptData?.attempt.durationInMinutes ?? 0) * 60, 0);
+  const totalDurationSeconds = Math.max(
+    (attemptData?.attempt.durationInMinutes ?? 0) * 60,
+    0,
+  );
   const elapsedSeconds =
-    secondsLeft === null ? 0 : Math.max(totalDurationSeconds - Math.max(secondsLeft, 0), 0);
+    secondsLeft === null
+      ? 0
+      : Math.max(totalDurationSeconds - Math.max(secondsLeft, 0), 0);
   const timedSectionIndex = useMemo(
-    () => (isSectionWiseTiming ? getTimedSectionIndex(sectionGroups, elapsedSeconds) : 0),
-    [elapsedSeconds, isSectionWiseTiming, sectionGroups]
+    () =>
+      isSectionWiseTiming
+        ? getTimedSectionIndex(sectionGroups, elapsedSeconds)
+        : 0,
+    [elapsedSeconds, isSectionWiseTiming, sectionGroups],
   );
   const currentQuestionSectionIndex = questionSectionIndexes[currentIndex] ?? 0;
 
   const effectiveSectionIndex = useMemo(() => {
     if (!isSectionalTest) return null;
     if (isSectionWiseTiming) return timedSectionIndex;
-    if (allowFreeSectionSwitching) return Math.max(currentQuestionSectionIndex, 0);
+    if (allowFreeSectionSwitching)
+      return Math.max(currentQuestionSectionIndex, 0);
     return Math.max(manualSectionIndex, 0);
   }, [
     allowFreeSectionSwitching,
@@ -265,7 +297,11 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
 
   const visibleQuestionIndexes = useMemo(() => {
     if (!attemptData) return [];
-    if (!isSectionalTest || allowFreeSectionSwitching || effectiveSectionIndex === null) {
+    if (
+      !isSectionalTest ||
+      allowFreeSectionSwitching ||
+      effectiveSectionIndex === null
+    ) {
       return attemptData.questions.map((_, index) => index);
     }
     return sectionGroups[effectiveSectionIndex]?.questionIndexes ?? [];
@@ -278,46 +314,69 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
   ]);
 
   const currentSectionGroup =
-  effectiveSectionIndex !== null ? sectionGroups[effectiveSectionIndex] ?? null : null;
+    effectiveSectionIndex !== null
+      ? (sectionGroups[effectiveSectionIndex] ?? null)
+      : null;
 
-const currentSectionSecondsLeft =
-  isSectionWiseTiming && currentSectionGroup
-    ? Math.max(currentSectionGroup.cumulativeEndSeconds - elapsedSeconds, 0)
-    : null;
+  const currentSectionSecondsLeft =
+    isSectionWiseTiming && currentSectionGroup
+      ? Math.max(currentSectionGroup.cumulativeEndSeconds - elapsedSeconds, 0)
+      : null;
 
-const isOverallLowTime = secondsLeft !== null && secondsLeft <= 300;
-const isCurrentSectionLowTime =
-  currentSectionSecondsLeft !== null && currentSectionSecondsLeft <= 300;
+  const isOverallLowTime = secondsLeft !== null && secondsLeft <= 300;
+  const isCurrentSectionLowTime =
+    currentSectionSecondsLeft !== null && currentSectionSecondsLeft <= 300;
 
-const showSectionEndingWarning =
-  isSectionWiseTiming &&
-  currentSectionGroup !== null &&
-  currentSectionSecondsLeft !== null &&
-  currentSectionSecondsLeft > 0 &&
-  currentSectionSecondsLeft <= 60;
+  const showSectionEndingWarning =
+    isSectionWiseTiming &&
+    currentSectionGroup !== null &&
+    currentSectionSecondsLeft !== null &&
+    currentSectionSecondsLeft > 0 &&
+    currentSectionSecondsLeft <= 60;
 
-const answeredCount = useMemo(
-    () => attemptData?.questions.filter((item) => Boolean(item.selectedAnswer)).length ?? 0,
-    [attemptData]
+  const answeredCount = useMemo(
+    () =>
+      attemptData?.questions.filter((item) => Boolean(item.selectedAnswer))
+        .length ?? 0,
+    [attemptData],
   );
   const reviewCount = useMemo(
-    () => attemptData?.questions.filter((item) => item.markedForReview).length ?? 0,
-    [attemptData]
+    () =>
+      attemptData?.questions.filter((item) => item.markedForReview).length ?? 0,
+    [attemptData],
   );
   const unansweredCount = useMemo(
-    () => attemptData?.questions.filter((item) => !item.selectedAnswer).length ?? 0,
-    [attemptData]
+    () =>
+      attemptData?.questions.filter((item) => !item.selectedAnswer).length ?? 0,
+    [attemptData],
   );
+  const paletteItems = useMemo(() => {
+    if (!attemptData) return [];
+
+    return visibleQuestionIndexes.map((index) => {
+      const item = attemptData.questions[index];
+
+      return {
+        key: item.testQuestionId,
+        number: item.questionNumber,
+        state: getPaletteState(index),
+      };
+    });
+  }, [attemptData, visibleQuestionIndexes, currentIndex]);
 
   function setTransientSectionNotice(message: string) {
     setSectionNotice(message);
-    if (sectionNoticeTimeoutRef.current) window.clearTimeout(sectionNoticeTimeoutRef.current);
-    sectionNoticeTimeoutRef.current = window.setTimeout(() => setSectionNotice(null), 4000);
+    if (sectionNoticeTimeoutRef.current)
+      window.clearTimeout(sectionNoticeTimeoutRef.current);
+    sectionNoticeTimeoutRef.current = window.setTimeout(
+      () => setSectionNotice(null),
+      4000,
+    );
   }
 
   async function loadAttemptView(attemptId: string) {
     const viewResponse = await apiGet<AttemptViewResponse>(
-      `/api/attempts/view?attemptId=${encodeURIComponent(attemptId)}`
+      `/api/attempts/view?attemptId=${encodeURIComponent(attemptId)}`,
     );
     if (!viewResponse.success || !viewResponse.data) {
       throw new Error(viewResponse.message || "Failed to load attempt.");
@@ -342,14 +401,21 @@ const answeredCount = useMemo(
       try {
         setLoading(true);
         setBootError(null);
-        const startResponse = await apiPost<StartAttemptResponse>("/api/attempts/start", { testId });
+        const startResponse = await apiPost<StartAttemptResponse>(
+          "/api/attempts/start",
+          { testId },
+        );
         if (!startResponse.success || !startResponse.data) {
           throw new Error(startResponse.message || "Failed to start attempt.");
         }
         if (!cancelled) await loadAttemptView(startResponse.data.attempt.id);
       } catch (error) {
         if (!cancelled) {
-          setBootError(error instanceof Error ? error.message : "Unable to start this test right now.");
+          setBootError(
+            error instanceof Error
+              ? error.message
+              : "Unable to start this test right now.",
+          );
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -360,7 +426,8 @@ const answeredCount = useMemo(
 
     return () => {
       cancelled = true;
-      if (sectionNoticeTimeoutRef.current) window.clearTimeout(sectionNoticeTimeoutRef.current);
+      if (sectionNoticeTimeoutRef.current)
+        window.clearTimeout(sectionNoticeTimeoutRef.current);
     };
   }, [testId]);
 
@@ -375,7 +442,9 @@ const answeredCount = useMemo(
     }
 
     const timer = window.setInterval(() => {
-      setSecondsLeft((previous) => (previous === null ? null : previous > 0 ? previous - 1 : 0));
+      setSecondsLeft((previous) =>
+        previous === null ? null : previous > 0 ? previous - 1 : 0,
+      );
     }, 1000);
 
     return () => window.clearInterval(timer);
@@ -383,7 +452,10 @@ const answeredCount = useMemo(
 
   useEffect(() => {
     if (!attemptData || !isSectionalTest || allowFreeSectionSwitching) return;
-    if (!visibleQuestionIndexes.includes(currentIndex) && visibleQuestionIndexes.length > 0) {
+    if (
+      !visibleQuestionIndexes.includes(currentIndex) &&
+      visibleQuestionIndexes.length > 0
+    ) {
       setCurrentIndex(visibleQuestionIndexes[0]);
     }
   }, [
@@ -395,9 +467,19 @@ const answeredCount = useMemo(
   ]);
 
   useEffect(() => {
-    if (!attemptData || !isSectionalTest || isSectionWiseTiming || allowFreeSectionSwitching) return;
-    const nextManualSectionIndex = Math.max(questionSectionIndexes[currentIndex] ?? 0, 0);
-    if (nextManualSectionIndex > manualSectionIndex) setManualSectionIndex(nextManualSectionIndex);
+    if (
+      !attemptData ||
+      !isSectionalTest ||
+      isSectionWiseTiming ||
+      allowFreeSectionSwitching
+    )
+      return;
+    const nextManualSectionIndex = Math.max(
+      questionSectionIndexes[currentIndex] ?? 0,
+      0,
+    );
+    if (nextManualSectionIndex > manualSectionIndex)
+      setManualSectionIndex(nextManualSectionIndex);
   }, [
     allowFreeSectionSwitching,
     attemptData,
@@ -430,14 +512,20 @@ const answeredCount = useMemo(
     }
     if (previousGroup && nextGroup) {
       setTransientSectionNotice(
-        `Section "${previousGroup.title}" is locked. Moved automatically to "${nextGroup.title}".`
+        `Section "${previousGroup.title}" is locked. Moved automatically to "${nextGroup.title}".`,
       );
     }
-  }, [attemptData, currentSectionGroup, isSectionWiseTiming, sectionGroups, timedSectionIndex]);
+  }, [
+    attemptData,
+    currentSectionGroup,
+    isSectionWiseTiming,
+    sectionGroups,
+    timedSectionIndex,
+  ]);
 
   async function updateAnswer(
     params: { selectedAnswer?: string | null; markedForReview?: boolean },
-    questionOverride?: AttemptViewResponse["questions"][number]
+    questionOverride?: AttemptViewResponse["questions"][number],
   ) {
     const targetQuestion = questionOverride ?? currentQuestion;
     if (!attemptData || !targetQuestion) return false;
@@ -446,12 +534,16 @@ const answeredCount = useMemo(
     setSaveStatus("saving");
 
     try {
-      const response = await apiPost<SaveAnswerResponse>("/api/attempts/save-answer", {
-        attemptId: attemptData.attempt.id,
-        testQuestionId: targetQuestion.testQuestionId,
-        ...params,
-      });
-      if (!response.success) throw new Error(response.message || "Failed to save answer.");
+      const response = await apiPost<SaveAnswerResponse>(
+        "/api/attempts/save-answer",
+        {
+          attemptId: attemptData.attempt.id,
+          testQuestionId: targetQuestion.testQuestionId,
+          ...params,
+        },
+      );
+      if (!response.success)
+        throw new Error(response.message || "Failed to save answer.");
 
       setAttemptData((previous) => {
         if (!previous) return previous;
@@ -461,7 +553,10 @@ const answeredCount = useMemo(
             item.testQuestionId === targetQuestion.testQuestionId
               ? {
                   ...item,
-                  ...(Object.prototype.hasOwnProperty.call(params, "selectedAnswer")
+                  ...(Object.prototype.hasOwnProperty.call(
+                    params,
+                    "selectedAnswer",
+                  )
                     ? {
                         selectedAnswer: params.selectedAnswer ?? null,
                         isAnswered: Boolean(params.selectedAnswer),
@@ -471,7 +566,7 @@ const answeredCount = useMemo(
                     ? { markedForReview: params.markedForReview }
                     : {}),
                 }
-              : item
+              : item,
           ),
         };
       });
@@ -487,7 +582,7 @@ const answeredCount = useMemo(
       return false;
     } finally {
       setBusyQuestionId((previous) =>
-        previous === targetQuestion.testQuestionId ? null : previous
+        previous === targetQuestion.testQuestionId ? null : previous,
       );
     }
   }
@@ -499,7 +594,7 @@ const answeredCount = useMemo(
         selectedAnswer: currentQuestion.selectedAnswer,
         markedForReview: currentQuestion.markedForReview,
       },
-      currentQuestion
+      currentQuestion,
     );
   }
 
@@ -513,8 +608,14 @@ const answeredCount = useMemo(
   }
 
   function canAccessQuestionIndex(index: number) {
-    if (!attemptData || index < 0 || index >= attemptData.questions.length) return false;
-    if (!isSectionalTest || allowFreeSectionSwitching || effectiveSectionIndex === null) return true;
+    if (!attemptData || index < 0 || index >= attemptData.questions.length)
+      return false;
+    if (
+      !isSectionalTest ||
+      allowFreeSectionSwitching ||
+      effectiveSectionIndex === null
+    )
+      return true;
     return questionSectionIndexes[index] === effectiveSectionIndex;
   }
 
@@ -523,7 +624,7 @@ const answeredCount = useMemo(
       setTransientSectionNotice(
         isSectionWiseTiming
           ? "Only the current timed section is available right now."
-          : "You cannot reopen a previous section once you move ahead."
+          : "You cannot reopen a previous section once you move ahead.",
       );
       return;
     }
@@ -532,13 +633,17 @@ const answeredCount = useMemo(
 
   function jumpToFirstUnanswered() {
     if (!attemptData) return;
-    const target = visibleQuestionIndexes.find((index) => !attemptData.questions[index]?.selectedAnswer);
+    const target = visibleQuestionIndexes.find(
+      (index) => !attemptData.questions[index]?.selectedAnswer,
+    );
     if (target !== undefined) setCurrentIndex(target);
   }
 
   function jumpToFirstReview() {
     if (!attemptData) return;
-    const target = visibleQuestionIndexes.find((index) => attemptData.questions[index]?.markedForReview);
+    const target = visibleQuestionIndexes.find(
+      (index) => attemptData.questions[index]?.markedForReview,
+    );
     if (target !== undefined) setCurrentIndex(target);
   }
 
@@ -557,17 +662,26 @@ const answeredCount = useMemo(
   async function handleNextQuestion() {
     if (!attemptData) return;
     if (!isSectionalTest || allowFreeSectionSwitching) {
-      setCurrentIndex((previous) => Math.min(previous + 1, attemptData.questions.length - 1));
+      setCurrentIndex((previous) =>
+        Math.min(previous + 1, attemptData.questions.length - 1),
+      );
       return;
     }
 
     const currentVisiblePosition = visibleQuestionIndexes.indexOf(currentIndex);
-    if (currentVisiblePosition >= 0 && currentVisiblePosition < visibleQuestionIndexes.length - 1) {
+    if (
+      currentVisiblePosition >= 0 &&
+      currentVisiblePosition < visibleQuestionIndexes.length - 1
+    ) {
       setCurrentIndex(visibleQuestionIndexes[currentVisiblePosition + 1]);
       return;
     }
 
-    if (!isSectionWiseTiming && effectiveSectionIndex !== null && effectiveSectionIndex < sectionGroups.length - 1) {
+    if (
+      !isSectionWiseTiming &&
+      effectiveSectionIndex !== null &&
+      effectiveSectionIndex < sectionGroups.length - 1
+    ) {
       const nextSectionIndex = effectiveSectionIndex + 1;
       const nextSection = sectionGroups[nextSectionIndex];
       if (nextSection?.questionIndexes[0] !== undefined) {
@@ -575,7 +689,7 @@ const answeredCount = useMemo(
         setManualSectionIndex(nextSectionIndex);
         setCurrentIndex(nextSection.questionIndexes[0]);
         setTransientSectionNotice(
-          `Moved to "${nextSection.title}". Previous section is now locked.`
+          `Moved to "${nextSection.title}". Previous section is now locked.`,
         );
       }
     }
@@ -602,7 +716,7 @@ const answeredCount = useMemo(
           `Marked for Review: ${reviewCount}`,
           "",
           "Unanswered questions will remain unanswered.",
-        ].join("\n")
+        ].join("\n"),
       );
       if (!confirmed) return;
     }
@@ -612,12 +726,15 @@ const answeredCount = useMemo(
       const response = await apiPost<{ id: string }>("/api/attempts/submit", {
         attemptId: attemptData.attempt.id,
       });
-      if (!response.success) throw new Error(response.message || "Failed to submit attempt.");
+      if (!response.success)
+        throw new Error(response.message || "Failed to submit attempt.");
       router.push(
-        `/student/tests/${testId}/submitted?attemptId=${encodeURIComponent(attemptData.attempt.id)}`
+        `/student/tests/${testId}/submitted?attemptId=${encodeURIComponent(attemptData.attempt.id)}`,
       );
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to submit attempt.");
+      alert(
+        error instanceof Error ? error.message : "Failed to submit attempt.",
+      );
       setSubmitting(false);
     }
   }
@@ -625,7 +742,9 @@ const answeredCount = useMemo(
   if (loading) {
     return (
       <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Loading test...</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">
+          Loading test...
+        </h1>
         <p className="mt-2 text-sm text-slate-600">
           Starting or resuming your real attempt from the backend.
         </p>
@@ -637,7 +756,9 @@ const answeredCount = useMemo(
     return (
       <div className="rounded-3xl border border-rose-200 bg-rose-50 p-8 text-rose-700">
         <h1 className="text-2xl font-semibold">Unable to open attempt</h1>
-        <p className="mt-2 text-sm">{bootError || "Attempt data could not be loaded."}</p>
+        <p className="mt-2 text-sm">
+          {bootError || "Attempt data could not be loaded."}
+        </p>
       </div>
     );
   }
@@ -672,90 +793,75 @@ const answeredCount = useMemo(
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-5">
           <div>
-            <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Live Attempt</p>
+            <p className="text-sm font-medium uppercase tracking-wide text-slate-500">
+              Live Attempt
+            </p>
             <h1 className="mt-1 text-2xl font-semibold text-slate-900">
               {attemptData.attempt.title}
             </h1>
             <p className="mt-2 text-sm text-slate-600">
-              Question {currentQuestion.questionNumber} of {attemptData.questions.length}
-              {currentSectionGroup ? ` • Section: ${currentSectionGroup.title}` : ""}
+              Question {currentQuestion.questionNumber} of{" "}
+              {attemptData.questions.length}
+              {currentSectionGroup
+                ? ` • Section: ${currentSectionGroup.title}`
+                : ""}
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Time Left</p>
-              <p
-  className={`mt-1 text-xl font-semibold ${
-    isOverallLowTime ? "text-red-600" : "text-slate-900"
-  }`}
->
-  {formatTimer(secondsLeft)}
-</p>
-            </div>
-
-            {isSectionWiseTiming && currentSectionGroup ? (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Current Section</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">{currentSectionGroup.title}</p>
-                <p
-  className={`mt-1 text-lg font-semibold ${
-    isCurrentSectionLowTime ? "text-red-600" : "text-slate-900"
-  }`}
->
-  {formatTimer(currentSectionSecondsLeft)}
-</p>
-              </div>
-            ) : null}
-
-            <div
-              className={`rounded-2xl border px-4 py-3 text-center text-sm font-medium ${
-                saveStatus === "saving"
-                  ? "border-blue-200 bg-blue-50 text-blue-700"
-                  : saveStatus === "saved"
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  : saveStatus === "error"
-                  ? "border-rose-200 bg-rose-50 text-rose-700"
-                  : "border-slate-200 bg-slate-50 text-slate-600"
-              }`}
-            >
-              {saveStatus === "saving"
-                ? "Saving..."
-                : saveStatus === "saved"
-                ? "Saved"
-                : saveStatus === "error"
-                ? "Save Failed"
-                : "Ready"}
-            </div>
-          </div>
+          <TestTimerBar
+            overallSecondsLeft={secondsLeft}
+            isOverallLowTime={isOverallLowTime}
+            currentSectionTitle={currentSectionGroup?.title ?? null}
+            currentSectionSecondsLeft={currentSectionSecondsLeft}
+            isCurrentSectionLowTime={isCurrentSectionLowTime}
+            showCurrentSectionTimer={Boolean(
+              isSectionWiseTiming && currentSectionGroup,
+            )}
+            saveStatus={saveStatus}
+            formatTimer={formatTimer}
+          />
         </div>
 
         {sectionNotice ? (
-  <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-    {sectionNotice}
-  </div>
-) : null}
+          <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {sectionNotice}
+          </div>
+        ) : null}
 
-{showSectionEndingWarning ? (
-  <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-    Warning: Section "{currentSectionGroup?.title}" will auto-switch in{" "}
-    <span className="font-semibold">{formatTimer(currentSectionSecondsLeft)}</span>.
-    Save/review your answer now.
-  </div>
-) : null}
+        {showSectionEndingWarning ? (
+          <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            Warning: Section "{currentSectionGroup?.title}" will auto-switch in{" "}
+            <span className="font-semibold">
+              {formatTimer(currentSectionSecondsLeft)}
+            </span>
+            . Save/review your answer now.
+          </div>
+        ) : null}
 
-<div className="mt-6 grid gap-4 sm:grid-cols-3">
+        <div className="mt-6 grid gap-4 sm:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Answered</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">{answeredCount}</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">
+              Answered
+            </p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">
+              {answeredCount}
+            </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Marked for Review</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">{reviewCount}</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">
+              Marked for Review
+            </p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">
+              {reviewCount}
+            </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Unanswered</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">{unansweredCount}</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">
+              Unanswered
+            </p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">
+              {unansweredCount}
+            </p>
           </div>
         </div>
 
@@ -780,7 +886,9 @@ const answeredCount = useMemo(
           <p className="text-sm font-medium uppercase tracking-wide text-slate-500">
             Q{currentQuestion.questionNumber}
           </p>
-          <h2 className="mt-2 text-xl font-semibold text-slate-900">{currentQuestion.questionText}</h2>
+          <h2 className="mt-2 text-xl font-semibold text-slate-900">
+            {currentQuestion.questionText}
+          </h2>
 
           <div className="mt-6 space-y-3">
             {optionEntries.map((option) => {
@@ -789,7 +897,9 @@ const answeredCount = useMemo(
                 <label
                   key={option.key}
                   className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition ${
-                    isSelected ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:bg-slate-50"
+                    isSelected
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-slate-200 hover:bg-slate-50"
                   }`}
                 >
                   <input
@@ -806,8 +916,12 @@ const answeredCount = useMemo(
                     className="mt-1"
                   />
                   <div>
-                    <span className="text-sm font-semibold text-slate-700">{option.key}</span>
-                    <p className="mt-1 text-sm text-slate-700">{option.value}</p>
+                    <span className="text-sm font-semibold text-slate-700">
+                      {option.key}
+                    </span>
+                    <p className="mt-1 text-sm text-slate-700">
+                      {option.value}
+                    </p>
                   </div>
                 </label>
               );
@@ -826,7 +940,10 @@ const answeredCount = useMemo(
             <button
               type="button"
               onClick={() => void handleClearAnswer()}
-              disabled={busyQuestionId === currentQuestion.testQuestionId || !currentQuestion.selectedAnswer}
+              disabled={
+                busyQuestionId === currentQuestion.testQuestionId ||
+                !currentQuestion.selectedAnswer
+              }
               className="rounded-xl border px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
             >
               Clear Answer
@@ -845,7 +962,9 @@ const answeredCount = useMemo(
                   : "border border-amber-300 text-amber-800 hover:bg-amber-50"
               }`}
             >
-              {currentQuestion.markedForReview ? "Unmark Review" : "Mark for Review"}
+              {currentQuestion.markedForReview
+                ? "Unmark Review"
+                : "Mark for Review"}
             </button>
             <button
               type="button"
@@ -873,33 +992,22 @@ const answeredCount = useMemo(
           </div>
 
           <p className="mt-4 text-xs text-slate-500">
-            Selecting an option saves immediately. When section restrictions are active, only the current section stays open for navigation.
+            Selecting an option saves immediately. When section restrictions are
+            active, only the current section stays open for navigation.
           </p>
         </div>
       </section>
 
       <aside className="space-y-6">
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">Question Palette</h3>
-          <p className="mt-1 text-xs text-slate-500">Blue = Current, Green = Answered, Yellow = Review.</p>
-          <div className="mt-4 grid grid-cols-5 gap-2">
-            {visibleQuestionIndexes.map((index) => {
-              const item = attemptData.questions[index];
-              return (
-                <button
-                  key={item.testQuestionId}
-                  type="button"
-                  onClick={() => goToQuestion(index)}
-                  className={`rounded-xl border px-3 py-2 text-sm font-semibold ${paletteClass(
-                    getPaletteState(index)
-                  )}`}
-                >
-                  {item.questionNumber}
-                </button>
-              );
-            })}
-          </div>
-        </section>
+        <QuestionPalette
+          items={paletteItems}
+          onQuestionClick={(visibleIndex) => {
+            const targetIndex = visibleQuestionIndexes[visibleIndex];
+            if (targetIndex !== undefined) {
+              goToQuestion(targetIndex);
+            }
+          }}
+        />
 
         {sectionGroups.length > 0 ? (
           <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -908,25 +1016,29 @@ const answeredCount = useMemo(
               {sectionGroups.map((section, index) => {
                 const isCurrent = effectiveSectionIndex === index;
                 const isLocked =
-                  !allowFreeSectionSwitching && effectiveSectionIndex !== null && index < effectiveSectionIndex;
+                  !allowFreeSectionSwitching &&
+                  effectiveSectionIndex !== null &&
+                  index < effectiveSectionIndex;
                 const isFuture =
-                  !allowFreeSectionSwitching && effectiveSectionIndex !== null && index > effectiveSectionIndex;
+                  !allowFreeSectionSwitching &&
+                  effectiveSectionIndex !== null &&
+                  index > effectiveSectionIndex;
                 const sectionTimerLabel = isSectionWiseTiming
-  ? isCurrent
-    ? formatTimer(currentSectionSecondsLeft)
-    : isLocked
-      ? "Locked"
-      : section.durationInMinutes
-        ? `${section.durationInMinutes} min • Not Started`
-        : "Not Started"
-  : section.durationInMinutes
-    ? `${section.durationInMinutes} min`
-    : "Overall timer";
+                  ? isCurrent
+                    ? formatTimer(currentSectionSecondsLeft)
+                    : isLocked
+                      ? "Locked"
+                      : section.durationInMinutes
+                        ? `${section.durationInMinutes} min • Not Started`
+                        : "Not Started"
+                  : section.durationInMinutes
+                    ? `${section.durationInMinutes} min`
+                    : "Overall timer";
 
-const sectionTimerClass =
-  isSectionWiseTiming && isCurrent && isCurrentSectionLowTime
-    ? "text-red-600"
-    : "text-slate-700";
+                const sectionTimerClass =
+                  isSectionWiseTiming && isCurrent && isCurrentSectionLowTime
+                    ? "text-red-600"
+                    : "text-slate-700";
 
                 return (
                   <div
@@ -935,54 +1047,69 @@ const sectionTimerClass =
                       isCurrent
                         ? "border-blue-200 bg-blue-50"
                         : isLocked
-                        ? "border-slate-200 bg-slate-100 text-slate-500"
-                        : "border-slate-200 bg-slate-50"
+                          ? "border-slate-200 bg-slate-100 text-slate-500"
+                          : "border-slate-200 bg-slate-50"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-  {allowFreeSectionSwitching && section.questionIndexes[0] !== undefined ? (
-    <button
-      type="button"
-      onClick={() => goToQuestion(section.questionIndexes[0])}
-      className="font-medium text-slate-900 hover:text-blue-700 hover:underline"
-    >
-      {section.title}
-    </button>
-  ) : (
-    <p className="font-medium text-slate-900">{section.title}</p>
-  )}
+                        {allowFreeSectionSwitching &&
+                        section.questionIndexes[0] !== undefined ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              goToQuestion(section.questionIndexes[0])
+                            }
+                            className="font-medium text-slate-900 hover:text-blue-700 hover:underline"
+                          >
+                            {section.title}
+                          </button>
+                        ) : (
+                          <p className="font-medium text-slate-900">
+                            {section.title}
+                          </p>
+                        )}
 
-  <p className="mt-1 text-xs text-slate-600">
-    {section.startQuestionNumber && section.endQuestionNumber
-      ? `Q${section.startQuestionNumber}-Q${section.endQuestionNumber}`
-      : "No assigned questions"}
-  </p>
-</div>
+                        <p className="mt-1 text-xs text-slate-600">
+                          {section.startQuestionNumber &&
+                          section.endQuestionNumber
+                            ? `Q${section.startQuestionNumber}-Q${section.endQuestionNumber}`
+                            : "No assigned questions"}
+                        </p>
+                      </div>
                       <span
                         className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
                           isCurrent
                             ? "bg-blue-100 text-blue-700"
                             : isLocked
-                            ? "bg-slate-200 text-slate-500"
-                            : isFuture
-                            ? "bg-amber-100 text-amber-700"
-                            : "bg-emerald-100 text-emerald-700"
+                              ? "bg-slate-200 text-slate-500"
+                              : isFuture
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-emerald-100 text-emerald-700"
                         }`}
                       >
-                        {isCurrent ? "Current" : isLocked ? "Locked" : isFuture ? "Upcoming" : "Open"}
+                        {isCurrent
+                          ? "Current"
+                          : isLocked
+                            ? "Locked"
+                            : isFuture
+                              ? "Upcoming"
+                              : "Open"}
                       </span>
                     </div>
-                    <p className={`mt-2 text-sm ${sectionTimerClass}`}>{sectionTimerLabel}</p>
-                    {allowFreeSectionSwitching && section.questionIndexes[0] !== undefined ? (
-  <button
-    type="button"
-    onClick={() => goToQuestion(section.questionIndexes[0])}
-    className="mt-3 rounded-xl border px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-white"
-  >
-    Go to Section
-  </button>
-) : null}
+                    <p className={`mt-2 text-sm ${sectionTimerClass}`}>
+                      {sectionTimerLabel}
+                    </p>
+                    {allowFreeSectionSwitching &&
+                    section.questionIndexes[0] !== undefined ? (
+                      <button
+                        type="button"
+                        onClick={() => goToQuestion(section.questionIndexes[0])}
+                        className="mt-3 rounded-xl border px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-white"
+                      >
+                        Go to Section
+                      </button>
+                    ) : null}
                   </div>
                 );
               })}
