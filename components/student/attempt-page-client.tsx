@@ -6,6 +6,7 @@ import { QuestionPalette } from "@/components/student/question-palette";
 import { TestTimerBar } from "@/components/student/test-timer-bar";
 import { SectionNotices } from "@/components/student/section-notices";
 import { SectionPanel } from "@/components/student/section-panel";
+import { AttemptStatusBanners } from "@/components/student/attempt-status-banners";
 
 type AttemptPageClientProps = { testId: string };
 
@@ -336,6 +337,12 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
     currentSectionSecondsLeft > 0 &&
     currentSectionSecondsLeft <= 60;
 
+    const hasEmptyCurrentSection =
+  isSectionalTest &&
+  !allowFreeSectionSwitching &&
+  currentSectionGroup !== null &&
+  visibleQuestionIndexes.length === 0;
+
   const answeredCount = useMemo(
     () =>
       attemptData?.questions.filter((item) => Boolean(item.selectedAnswer))
@@ -622,80 +629,119 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
   }
 
   function goToQuestion(index: number) {
-    if (!canAccessQuestionIndex(index)) {
-      setTransientSectionNotice(
-        isSectionWiseTiming
-          ? "Only the current timed section is available right now."
-          : "You cannot reopen a previous section once you move ahead.",
-      );
-      return;
-    }
-    setCurrentIndex(index);
+  if (index < 0) {
+    setTransientSectionNotice("That question is not available.");
+    return;
   }
+
+  if (!canAccessQuestionIndex(index)) {
+    setTransientSectionNotice(
+      isSectionWiseTiming
+        ? "Only the current timed section is available right now."
+        : "You cannot reopen a previous section once you move ahead."
+    );
+    return;
+  }
+
+  setCurrentIndex(index);
+}
 
   function jumpToFirstUnanswered() {
-    if (!attemptData) return;
-    const target = visibleQuestionIndexes.find(
-      (index) => !attemptData.questions[index]?.selectedAnswer,
-    );
-    if (target !== undefined) setCurrentIndex(target);
+  if (!attemptData) return;
+
+  const target = visibleQuestionIndexes.find(
+    (index) => !attemptData.questions[index]?.selectedAnswer
+  );
+
+  if (target !== undefined) {
+    setCurrentIndex(target);
+    return;
   }
+
+  setTransientSectionNotice("No unanswered question is available in the current visible section.");
+}
 
   function jumpToFirstReview() {
-    if (!attemptData) return;
-    const target = visibleQuestionIndexes.find(
-      (index) => attemptData.questions[index]?.markedForReview,
-    );
-    if (target !== undefined) setCurrentIndex(target);
+  if (!attemptData) return;
+
+  const target = visibleQuestionIndexes.find(
+    (index) => attemptData.questions[index]?.markedForReview
+  );
+
+  if (target !== undefined) {
+    setCurrentIndex(target);
+    return;
   }
+
+  setTransientSectionNotice("No marked-for-review question is available in the current visible section.");
+}
 
   function handlePreviousQuestion() {
-    if (!attemptData) return;
-    if (!isSectionalTest || allowFreeSectionSwitching) {
-      setCurrentIndex((previous) => Math.max(previous - 1, 0));
-      return;
-    }
-    const currentVisiblePosition = visibleQuestionIndexes.indexOf(currentIndex);
-    if (currentVisiblePosition > 0) {
-      setCurrentIndex(visibleQuestionIndexes[currentVisiblePosition - 1]);
-    }
+  if (!attemptData) return;
+
+  if (!isSectionalTest || allowFreeSectionSwitching) {
+    setCurrentIndex((previous) => Math.max(previous - 1, 0));
+    return;
   }
 
+  if (visibleQuestionIndexes.length === 0) {
+    setTransientSectionNotice("No accessible question is available in the current section.");
+    return;
+  }
+
+  const currentVisiblePosition = visibleQuestionIndexes.indexOf(currentIndex);
+
+  if (currentVisiblePosition > 0) {
+    setCurrentIndex(visibleQuestionIndexes[currentVisiblePosition - 1]);
+  }
+}
+
   async function handleNextQuestion() {
-    if (!attemptData) return;
-    if (!isSectionalTest || allowFreeSectionSwitching) {
-      setCurrentIndex((previous) =>
-        Math.min(previous + 1, attemptData.questions.length - 1),
+  if (!attemptData) return;
+
+  if (!isSectionalTest || allowFreeSectionSwitching) {
+    setCurrentIndex((previous) =>
+      Math.min(previous + 1, attemptData.questions.length - 1)
+    );
+    return;
+  }
+
+  if (visibleQuestionIndexes.length === 0) {
+    setTransientSectionNotice("No accessible question is available in the current section.");
+    return;
+  }
+
+  const currentVisiblePosition = visibleQuestionIndexes.indexOf(currentIndex);
+
+  if (
+    currentVisiblePosition >= 0 &&
+    currentVisiblePosition < visibleQuestionIndexes.length - 1
+  ) {
+    setCurrentIndex(visibleQuestionIndexes[currentVisiblePosition + 1]);
+    return;
+  }
+
+  if (
+    !isSectionWiseTiming &&
+    effectiveSectionIndex !== null &&
+    effectiveSectionIndex < sectionGroups.length - 1
+  ) {
+    const nextSectionIndex = effectiveSectionIndex + 1;
+    const nextSection = sectionGroups[nextSectionIndex];
+
+    if (nextSection?.questionIndexes[0] !== undefined) {
+      await syncCurrentAnswerBeforeSectionTransition();
+      setManualSectionIndex(nextSectionIndex);
+      setCurrentIndex(nextSection.questionIndexes[0]);
+      setTransientSectionNotice(
+        `Moved to "${nextSection.title}".\nPrevious section is now locked.`
       );
       return;
     }
 
-    const currentVisiblePosition = visibleQuestionIndexes.indexOf(currentIndex);
-    if (
-      currentVisiblePosition >= 0 &&
-      currentVisiblePosition < visibleQuestionIndexes.length - 1
-    ) {
-      setCurrentIndex(visibleQuestionIndexes[currentVisiblePosition + 1]);
-      return;
-    }
-
-    if (
-      !isSectionWiseTiming &&
-      effectiveSectionIndex !== null &&
-      effectiveSectionIndex < sectionGroups.length - 1
-    ) {
-      const nextSectionIndex = effectiveSectionIndex + 1;
-      const nextSection = sectionGroups[nextSectionIndex];
-      if (nextSection?.questionIndexes[0] !== undefined) {
-        await syncCurrentAnswerBeforeSectionTransition();
-        setManualSectionIndex(nextSectionIndex);
-        setCurrentIndex(nextSection.questionIndexes[0]);
-        setTransientSectionNotice(
-          `Moved to "${nextSection.title}". Previous section is now locked.`,
-        );
-      }
-    }
+    setTransientSectionNotice(`Section "${nextSection?.title ?? "Next"}" has no assigned questions.`);
   }
+}
 
   async function handleClearAnswer() {
     if (!currentQuestion) return;
@@ -830,6 +876,12 @@ export function AttemptPageClient({ testId }: AttemptPageClientProps) {
   currentSectionTitle={currentSectionGroup?.title ?? null}
   currentSectionSecondsLeft={currentSectionSecondsLeft}
   formatTimer={formatTimer}
+/>
+
+<AttemptStatusBanners
+  hasMalformedAssignments={hasMalformedAssignments}
+  hasEmptyCurrentSection={hasEmptyCurrentSection}
+  currentSectionTitle={currentSectionGroup?.title ?? null}
 />
 
         <div className="mt-6 grid gap-4 sm:grid-cols-3">

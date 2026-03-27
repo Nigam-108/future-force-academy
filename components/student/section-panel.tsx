@@ -110,11 +110,24 @@ export function SectionPanel({
                       : "bg-emerald-100 text-emerald-700"
                   }`}
                 >
-                  {isCurrent ? "Current" : isLocked ? "Locked" : isFuture ? "Upcoming" : "Open"}
+                  {isCurrent
+  ? "Current"
+  : isLocked
+  ? "Locked"
+  : isFuture
+  ? "Upcoming"
+  : section.questionIndexes.length === 0
+  ? "Empty"
+  : "Open"}
                 </span>
               </div>
 
               <p className={`mt-2 text-sm ${sectionTimerClass}`}>{sectionTimerLabel}</p>
+              {section.questionIndexes.length === 0 ? (
+  <p className="mt-2 text-xs text-slate-500">
+    No assigned questions in this section yet.
+  </p>
+) : null}
 
               {allowFreeSectionSwitching && section.questionIndexes[0] !== undefined ? (
                 <button
